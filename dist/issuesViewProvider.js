@@ -134,7 +134,47 @@ class IssuesViewProvider {
                     break;
                 }
                 case 'openSettings': {
-                    await vscode.commands.executeCommand('workbench.action.openSettings', 'claudeSessionManager');
+                    const lang = this.getLanguage();
+                    const items = [
+                        {
+                            label: lang === 'en' ? '$(gear) Open Extension Settings' : '$(gear) Mở trang Cài đặt cấu hình',
+                            description: 'workbench.action.openSettings',
+                            action: 'settings'
+                        },
+                        {
+                            label: lang === 'en' ? '$(folder-opened) Select Claude Storage Directory...' : '$(folder-opened) Chọn thư mục lưu trữ Claude (~/.claude/projects)...',
+                            description: lang === 'en' ? 'Browse folder instead of pasting path' : 'Chọn thư mục trực quan từ máy',
+                            action: 'browseStorage'
+                        },
+                        {
+                            label: lang === 'en' ? '$(root-folder) Select Workspace Root Directory...' : '$(root-folder) Chọn thư mục gốc Workspace (Projects Root)...',
+                            description: lang === 'en' ? 'Browse root directory containing repos' : 'Chọn thư mục chứa các repo dự án',
+                            action: 'browseWorkspace'
+                        },
+                        {
+                            label: lang === 'en' ? '$(cloud-download) Check for Updates' : '$(cloud-download) Kiểm tra bản cập nhật mới',
+                            description: 'GitHub Releases',
+                            action: 'update'
+                        }
+                    ];
+                    const pick = await vscode.window.showQuickPick(items, {
+                        placeHolder: lang === 'en' ? 'Select setting or configuration action...' : 'Chọn thao tác cài đặt...'
+                    });
+                    if (!pick)
+                        break;
+                    if (pick.action === 'settings') {
+                        await vscode.commands.executeCommand('workbench.action.openSettings', 'claudeSessionManager');
+                    }
+                    else if (pick.action === 'browseStorage') {
+                        await vscode.commands.executeCommand('claudeSessionManager.browseStoragePath');
+                    }
+                    else if (pick.action === 'browseWorkspace') {
+                        await vscode.commands.executeCommand('claudeSessionManager.browseWorkspaceRoot');
+                    }
+                    else if (pick.action === 'update') {
+                        if (this._context)
+                            await updater_1.ExtensionUpdater.checkForUpdates(this._context, true);
+                    }
                     break;
                 }
                 case 'checkForUpdates': {
@@ -698,6 +738,22 @@ class IssuesViewProvider {
       color: #ffffff;
     }
 
+    .worktree-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: -2px;
+      margin-bottom: 8px;
+      padding: 0 1px;
+    }
+
+    .worktree-filter-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+      user-select: none;
+    }
+
     .ws-dot {
       width: 6px;
       height: 6px;
@@ -1122,7 +1178,7 @@ class IssuesViewProvider {
     </button>
   </div>
 
-  <!-- Thanh chọn Workspace / Dự án & Thống kê Token hôm nay -->
+  <!-- Row 1: Thanh chọn Workspace / Dự án & Thống kê Token hôm nay -->
   <div class="workspace-bar" id="workspaceBar">
     <div class="ws-pills-wrap">
       <button class="ws-pill" id="wsBtnAll">
@@ -1132,16 +1188,26 @@ class IssuesViewProvider {
         <span class="ws-dot"></span>
         <span id="wsCurrentName"></span>
       </button>
-      <button class="ws-pill ws-pill-worktree" id="wsBtnWorktree" style="display: none;" title="Lọc theo Git Worktree (Click để chọn trong Popup)">
-        <span class="ws-worktree-icon">🌿</span>
-        <span id="wsWorktreeLabel">Worktree: Tất cả ▾</span>
-        <span id="wsWorktreeClear" class="ws-worktree-clear" style="display: none;" title="Bỏ lọc worktree">✕</span>
-      </button>
     </div>
     <div class="ws-tokens-badge" id="wsTokensBadge" title="Tổng số token Claude đã dùng hôm nay">
       <span class="ws-tokens-label">tokens:</span>
       <span class="ws-tokens-num" id="wsTokensNum">0</span>
     </div>
+  </div>
+
+  <!-- Row 2: Bộ lọc Git Worktree (Tách dòng riêng, không emoji, tinh gọn chuẩn VS Code) -->
+  <div class="worktree-filter-row" id="worktreeFilterRow" style="display: none;">
+    <span class="worktree-filter-label" id="worktreeFilterLabel">Worktree:</span>
+    <button class="ws-pill ws-pill-worktree" id="wsBtnWorktree" title="Lọc theo Git Worktree (Click để chọn trong Popup)">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="6" y1="3" x2="6" y2="15"></line>
+        <circle cx="18" cy="6" r="3"></circle>
+        <circle cx="18" cy="6" r="3"></circle>
+        <path d="M18 9a9 9 0 0 1-9 9"></path>
+      </svg>
+      <span id="wsWorktreeLabel">Tất cả ▾</span>
+      <span id="wsWorktreeClear" class="ws-worktree-clear" style="display: none;" title="Bỏ lọc worktree">✕</span>
+    </button>
   </div>
 
   <!-- 3 Tab Lọc: Tất cả > Hôm nay > Đang chạy -->
@@ -1169,6 +1235,8 @@ class IssuesViewProvider {
     const wsBtnAll = document.getElementById('wsBtnAll');
     const wsCurrentName = document.getElementById('wsCurrentName');
     const wsAllText = document.getElementById('wsAllText');
+    const worktreeFilterRow = document.getElementById('worktreeFilterRow');
+    const worktreeFilterLabel = document.getElementById('worktreeFilterLabel');
     const wsBtnWorktree = document.getElementById('wsBtnWorktree');
     const wsWorktreeLabel = document.getElementById('wsWorktreeLabel');
     const wsWorktreeClear = document.getElementById('wsWorktreeClear');
@@ -1270,6 +1338,7 @@ class IssuesViewProvider {
       const tabAll = document.getElementById('tabAllBtn');
       if (tabAll) tabAll.textContent = t('tabAll');
       if (wsAllText) wsAllText.textContent = t('wsAll');
+      if (worktreeFilterLabel) worktreeFilterLabel.textContent = (currentLang === 'en' ? 'Worktree:' : 'Worktree:');
     }
 
     // 3. Khôi phục tab lọc đang chọn
@@ -1415,22 +1484,22 @@ class IssuesViewProvider {
           }
         }
 
-        // Cập nhật nút Worktree
+        // Cập nhật dòng bộ lọc Worktree (tách dòng riêng)
         const hasAnyWorktree = allSessions.some(s => !!s.branch);
-        if (wsBtnWorktree) {
+        if (worktreeFilterRow) {
           if (hasAnyWorktree) {
-            wsBtnWorktree.style.display = 'inline-flex';
+            worktreeFilterRow.style.display = 'flex';
             if (currentWorktree) {
-              wsBtnWorktree.classList.add('active');
+              wsBtnWorktree?.classList.add('active');
               if (wsWorktreeLabel) wsWorktreeLabel.textContent = currentWorktree;
               if (wsWorktreeClear) wsWorktreeClear.style.display = 'inline-flex';
             } else {
-              wsBtnWorktree.classList.remove('active');
-              if (wsWorktreeLabel) wsWorktreeLabel.textContent = currentLang === 'en' ? 'Worktree: All ▾' : 'Worktree: Tất cả ▾';
+              wsBtnWorktree?.classList.remove('active');
+              if (wsWorktreeLabel) wsWorktreeLabel.textContent = (currentLang === 'en' ? 'All ▾' : 'Tất cả ▾');
               if (wsWorktreeClear) wsWorktreeClear.style.display = 'none';
             }
           } else {
-            wsBtnWorktree.style.display = 'none';
+            worktreeFilterRow.style.display = 'none';
           }
         }
 

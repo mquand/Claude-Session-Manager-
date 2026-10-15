@@ -1,8 +1,8 @@
 {
   "name": "claude-session-manager",
   "displayName": "Claude Session & Issue Manager",
-  "description": "Quản lý các issue, session, và trạng thái hội thoại của Claude trực tiếp trên VS Code",
-  "version": "0.2.3",
+  "description": "Manage Claude Code and Claude CLI sessions, issues, token metrics, and git worktrees directly in VS Code / Quản lý phiên làm việc Claude trực tiếp trên VS Code",
+  "version": "0.2.4",
   "publisher": "mquand",
   "author": "mquand",
   "license": "MIT",
@@ -60,33 +60,43 @@
     "commands": [
       {
         "command": "claudeSessionManager.refresh",
-        "title": "Làm mới danh sách Sessions",
+        "title": "Refresh Claude Sessions / Làm mới danh sách Sessions",
         "icon": "$(refresh)"
       },
       {
         "command": "claudeSessionManager.openSettings",
-        "title": "Cấu hình đường dẫn lưu trữ"
+        "title": "Configure Storage Path & Settings / Cấu hình đường dẫn lưu trữ"
+      },
+      {
+        "command": "claudeSessionManager.browseStoragePath",
+        "title": "Select Claude Storage Folder (Browse...) / Chọn thư mục lưu trữ Claude Sessions",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "claudeSessionManager.browseWorkspaceRoot",
+        "title": "Select Workspace Root Folder (Browse...) / Chọn thư mục gốc Workspace",
+        "icon": "$(root-folder)"
       },
       {
         "command": "claudeSessionManager.checkForUpdates",
-        "title": "Kiểm tra bản cập nhật mới (GitHub Releases)",
+        "title": "Check for Updates (GitHub Releases) / Kiểm tra bản cập nhật mới",
         "icon": "$(cloud-download)"
       },
       {
         "command": "claudeSessionManager.toggleExplorerView",
-        "title": "Bật/Tắt hiển thị Claude Sessions trong thanh Explorer (File Tree)"
+        "title": "Toggle Claude Sessions in Explorer / Bật-Tắt hiển thị trong thanh Explorer"
       },
       {
         "command": "claudeSessionManager.toggleSourceControlView",
-        "title": "Bật/Tắt hiển thị Claude Sessions trong thanh Source Control (Git)"
+        "title": "Toggle Claude Sessions in Source Control / Bật-Tắt hiển thị trong Source Control"
       },
       {
         "command": "claudeSessionManager.statusMenu",
-        "title": "Menu trạng thái Claude Sessions"
+        "title": "Claude Sessions Status Menu / Menu trạng thái Claude Sessions"
       },
       {
         "command": "claudeSessionManager.openTab",
-        "title": "Mở tab lọc Claude Sessions"
+        "title": "Open Claude Sessions Tab / Mở tab lọc Claude Sessions"
       }
     ],
     "configuration": {
@@ -95,12 +105,12 @@
         "claudeSessionManager.storagePath": {
           "type": "string",
           "default": "~/.claude/projects",
-          "description": "Đường dẫn chứa lịch sử session hoặc file transcript của Claude"
+          "description": "Path to Claude conversation transcripts and sessions storage directory (~/.claude/projects). Use command 'Select Claude Storage Folder' to browse. / Đường dẫn chứa lịch sử session của Claude."
         },
         "claudeSessionManager.autoRefreshInterval": {
           "type": "number",
           "default": 10,
-          "description": "Thời gian tự động quét lại (giây)"
+          "description": "Auto-refresh scan interval in seconds (default: 10s) / Thời gian tự động quét lại (giây)"
         },
         "claudeSessionManager.language": {
           "type": "string",
@@ -110,27 +120,27 @@
             "en"
           ],
           "default": "auto",
-          "description": "Ngôn ngữ hiển thị giao diện (Interface language: auto / vi / en)"
+          "description": "Interface display language: auto / vi / en / Ngôn ngữ hiển thị giao diện"
         },
         "claudeSessionManager.showInExplorer": {
           "type": "boolean",
           "default": true,
-          "description": "Hiển thị Claude Sessions trong thanh Explorer (File Tree) bên cạnh Open Editors, Timeline... / Show Claude Sessions in the Explorer view"
+          "description": "Show Claude Sessions in the Explorer view (File Tree) / Hiển thị Claude Sessions trong thanh Explorer (File Tree)"
         },
         "claudeSessionManager.showInSourceControl": {
           "type": "boolean",
           "default": true,
-          "description": "Hiển thị Claude Sessions trong thanh Source Control (Git) / Show Claude Sessions in the Source Control view"
+          "description": "Show Claude Sessions in the Source Control view (Git) / Hiển thị Claude Sessions trong thanh Source Control (Git)"
         },
         "claudeSessionManager.workspaceRoot": {
           "type": "string",
           "default": "",
-          "description": "Đường dẫn thư mục chứa các dự án/repository (Workspace root folder). Để trống để tự động nhận diện theo thư mục đang mở trong VS Code."
+          "description": "Root folder path containing your projects or repositories. Leave empty to auto-detect. / Đường dẫn thư mục chứa các dự án/repository. Để trống để tự động nhận diện."
         },
         "claudeSessionManager.defaultRepo": {
           "type": "string",
           "default": "",
-          "description": "Tên repository mặc định khi phiên làm việc không xác định được dự án cụ thể."
+          "description": "Default repository name when a session cannot determine its project / Tên repository mặc định khi không xác định được dự án cụ thể."
         }
       }
     }

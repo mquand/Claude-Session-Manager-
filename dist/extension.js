@@ -3,8 +3,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = require("vscode");
+const fs = require("fs");
 const issuesViewProvider_1 = require("./issuesViewProvider");
 const updater_1 = require("./updater");
+const scanner_1 = require("./scanner");
 function activate(context) {
     const provider = new issuesViewProvider_1.IssuesViewProvider(context.extensionUri, context);
     // Đăng ký cho tất cả các view container: Activity Bar, Explorer, Source Control (và legacy IDs để phòng ngừa cache cũ)
@@ -54,6 +56,16 @@ function activate(context) {
                 tab: 'all'
             },
             {
+                label: '$(folder-opened) Chọn thư mục lưu trữ Claude (~/.claude/projects)...',
+                description: 'Duyệt và chọn thư mục lưu trữ thay vì gõ đường dẫn',
+                action: 'browseStorage'
+            },
+            {
+                label: '$(root-folder) Chọn thư mục gốc Workspace (Projects Root)...',
+                description: 'Duyệt và chọn thư mục chứa các dự án',
+                action: 'browseWorkspace'
+            },
+            {
                 label: '$(gear) Cài đặt cấu hình',
                 description: 'Mở thiết lập Claude Session Manager',
                 action: 'settings'
@@ -67,9 +79,57 @@ function activate(context) {
         if (selected.action === 'settings') {
             vscode.commands.executeCommand('workbench.action.openSettings', 'claudeSessionManager');
         }
+        else if (selected.action === 'browseStorage') {
+            vscode.commands.executeCommand('claudeSessionManager.browseStoragePath');
+        }
+        else if (selected.action === 'browseWorkspace') {
+            vscode.commands.executeCommand('claudeSessionManager.browseWorkspaceRoot');
+        }
         else if (selected.tab) {
             vscode.commands.executeCommand('claudeSessionManager.issuesView.focus');
             provider.switchTab(selected.tab);
+        }
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand('claudeSessionManager.browseStoragePath', async () => {
+        const config = vscode.workspace.getConfiguration('claudeSessionManager');
+        const currentPath = config.get('storagePath') || '~/.claude/projects';
+        const resolved = scanner_1.SessionScanner.resolveHomePath(currentPath);
+        const defaultUri = fs.existsSync(resolved) ? vscode.Uri.file(resolved) : undefined;
+        const selected = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: 'Chọn thư mục lưu trữ (Select Storage Folder)',
+            title: 'Chọn thư mục chứa lịch sử hội thoại Claude (~/.claude/projects)',
+            defaultUri
+        });
+        if (selected && selected[0]) {
+            await config.update('storagePath', selected[0].fsPath, vscode.ConfigurationTarget.Global);
+            vscode.window.showInformationMessage(`Đã cập nhật thư mục lưu trữ: ${selected[0].fsPath}`);
+            provider.setupRealtimeWatchers();
+            provider.refresh();
+        }
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand('claudeSessionManager.browseWorkspaceRoot', async () => {
+        const config = vscode.workspace.getConfiguration('claudeSessionManager');
+        const currentPath = config.get('workspaceRoot');
+        const resolved = currentPath ? scanner_1.SessionScanner.resolveHomePath(currentPath) : undefined;
+        const defaultUri = (resolved && fs.existsSync(resolved))
+            ? vscode.Uri.file(resolved)
+            : (vscode.workspace.workspaceFolders?.[0]?.uri);
+        const selected = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: 'Chọn thư mục gốc (Select Workspace Root)',
+            title: 'Chọn thư mục chứa các repo dự án của bạn',
+            defaultUri
+        });
+        if (selected && selected[0]) {
+            await config.update('workspaceRoot', selected[0].fsPath, vscode.ConfigurationTarget.Global);
+            vscode.window.showInformationMessage(`Đã cập nhật thư mục gốc dự án: ${selected[0].fsPath}`);
+            provider.setupRealtimeWatchers();
+            provider.refresh();
         }
     }));
     context.subscriptions.push(vscode.commands.registerCommand('claudeSessionManager.toggleExplorerView', async () => {
