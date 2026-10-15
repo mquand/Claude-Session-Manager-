@@ -557,7 +557,7 @@ class IssuesViewProvider {
 </head>
 <body>
   <div class="search-bar-row">
-    <input type="text" id="searchInput" class="search-input" placeholder="Tìm kiếm (#xxxx, nội dung)..." />
+    <input type="text" id="searchInput" class="search-input" placeholder="Tìm kiếm nội dung" />
     <button id="refreshBtn" class="icon-tool-btn" title="Làm mới danh sách (Refresh)">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
@@ -589,6 +589,16 @@ class IssuesViewProvider {
 
   <script>
     const vscode = acquireVsCodeApi();
+
+    // 1. Khai báo DOM Elements ở đầu script
+    const searchInput = document.getElementById('searchInput');
+    const contentContainer = document.getElementById('contentContainer');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const updateBtn = document.getElementById('updateBtn');
+    const filterBtns = document.querySelectorAll('.filter-btn');
+
+    // 2. Khôi phục State
     const savedState = vscode.getState() || {};
     let allSessions = savedState.sessions || [];
     let currentFilter = savedState.currentFilter || 'today';
@@ -598,8 +608,8 @@ class IssuesViewProvider {
       done: true
     };
 
-    // Khôi phục tab đang chọn từ state
-    document.querySelectorAll('.filter-btn').forEach(btn => {
+    // 3. Khôi phục tab lọc đang chọn
+    filterBtns.forEach(btn => {
       if (btn.getAttribute('data-filter') === currentFilter) {
         btn.classList.add('active');
       } else {
@@ -607,63 +617,29 @@ class IssuesViewProvider {
       }
     });
 
-    // Nếu đã có dữ liệu cache từ trước, render ngay lập tức (0ms)
-    if (allSessions && allSessions.length > 0) {
-      renderSessions();
+    // 4. Các hàm tiện ích
+    function escapeHtml(text) {
+      if (!text) return '';
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
 
-    // Báo cho backend extension biết Webview đã sẵn sàng nhận dữ liệu mới nhất
-    vscode.postMessage({ type: 'ready' });
-
-    window.addEventListener('message', event => {
-      const message = event.data;
-      if (message.type === 'updateSessions') {
-        allSessions = message.sessions || [];
-        const state = vscode.getState() || {};
-        state.sessions = allSessions;
-        vscode.setState(state);
-        renderSessions();
-      }
-    });
-
-    const searchInput = document.getElementById('searchInput');
-    searchInput.addEventListener('input', () => {
-      renderSessions();
-    });
-
-    const refreshBtn = document.getElementById('refreshBtn');
-    refreshBtn.addEventListener('click', () => {
-      const svg = refreshBtn.querySelector('svg');
-      if (svg) svg.classList.add('spin');
-      vscode.postMessage({ type: 'refresh' });
-      setTimeout(() => {
-        if (svg) svg.classList.remove('spin');
-      }, 600);
-    });
-
-    const settingsBtn = document.getElementById('settingsBtn');
-    settingsBtn.addEventListener('click', () => {
-      vscode.postMessage({ type: 'openSettings' });
-    });
-
-    const updateBtn = document.getElementById('updateBtn');
-    if (updateBtn) {
-      updateBtn.addEventListener('click', () => {
-        vscode.postMessage({ type: 'checkForUpdates' });
-      });
+    function openSession(id) {
+      vscode.postMessage({ type: 'openSession', id });
     }
 
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentFilter = btn.getAttribute('data-filter');
-        const state = vscode.getState() || {};
-        state.currentFilter = currentFilter;
-        vscode.setState(state);
-        renderSessions();
-      });
-    });
+    function approveSession(id) {
+      vscode.postMessage({ type: 'approve', id });
+    }
+
+    function deleteSession(id, title, encodedPath) {
+      const filePath = decodeURIComponent(encodedPath);
+      vscode.postMessage({ type: 'deleteSession', id, title, filePath });
+    }
 
     function toggleSection(key) {
       sectionState[key] = !sectionState[key];
@@ -671,97 +647,6 @@ class IssuesViewProvider {
       currentState.sectionState = sectionState;
       vscode.setState(currentState);
       renderSessions();
-    }
-
-    function renderSessions() {
-      const query = searchInput.value.toLowerCase().trim();
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-
-      const filtered = allSessions.filter(s => {
-        if (query) {
-          const match = (
-            (s.title && s.title.toLowerCase().includes(query)) ||
-            (s.issueId && s.issueId.toLowerCase().includes(query)) ||
-            (s.repo && s.repo.toLowerCase().includes(query)) ||
-            (s.branch && s.branch.toLowerCase().includes(query)) ||
-            (s.lastUserPrompt && s.lastUserPrompt.toLowerCase().includes(query)) ||
-            (s.lastAssistantResponse && s.lastAssistantResponse.toLowerCase().includes(query))
-          );
-          if (!match) return false;
-        }
-
-        if (currentFilter === 'today') {
-          return s.updatedAt >= startOfToday.getTime();
-        }
-        if (currentFilter === 'active') {
-          return s.status === 'need_accept' || s.status === 'running';
-        }
-        if (currentFilter === 'all') {
-          return true;
-        }
-        return true;
-      });
-
-      const needAcceptList = filtered.filter(s => s.status === 'need_accept');
-      const runningList = filtered.filter(s => s.status === 'running');
-      const doneList = filtered.filter(s => s.status === 'done');
-
-      let html = '';
-
-      if (needAcceptList.length > 0) {
-        const isOpen = query ? true : sectionState.need_accept;
-        html += '<div class="section-header" onclick="toggleSection(\'need_accept\')">' +
-          '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
-            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
-          '</span>' +
-          '<span style="color: #f59e0b; font-weight: 700;">CHỜ DUYỆT</span>' +
-          '<span class="count-badge">' + needAcceptList.length + '</span>' +
-        '</div>' +
-        '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
-        needAcceptList.forEach(s => html += renderCard(s));
-        html += '</div>';
-      }
-
-      if (runningList.length > 0) {
-        const isOpen = query ? true : sectionState.running;
-        html += '<div class="section-header" onclick="toggleSection(\'running\')">' +
-          '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
-            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
-          '</span>' +
-          '<span style="color: #3b82f6; font-weight: 700;">ĐANG CHẠY</span>' +
-          '<span class="count-badge">' + runningList.length + '</span>' +
-        '</div>' +
-        '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
-        runningList.forEach(s => html += renderCard(s));
-        html += '</div>';
-      }
-
-      if (doneList.length > 0) {
-        const isOpen = query ? true : sectionState.done;
-        html += '<div class="section-header" onclick="toggleSection(\'done\')">' +
-          '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
-            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
-          '</span>' +
-          '<span style="color: #10b981; font-weight: 700;">ĐÃ HOÀN THÀNH</span>' +
-          '<span class="count-badge">' + doneList.length + '</span>' +
-        '</div>' +
-        '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
-        doneList.forEach(s => html += renderCard(s));
-        html += '</div>';
-      }
-
-      if (filtered.length === 0) {
-        if (allSessions.length === 0) {
-          html = '<div style="text-align: center; color: #64748b; padding: 24px;">Chưa có phiên làm việc nào được ghi nhận.</div>';
-        } else if (currentFilter === 'today') {
-          html = '<div style="text-align: center; color: #64748b; padding: 24px;">Hôm nay chưa có phiên mới.<br><span style="font-size: 11.5px; opacity: 0.8; margin-top: 4px; display: inline-block;">Bấm tab <b>"Tất cả"</b> để xem lại các phiên trước đó.</span></div>';
-        } else {
-          html = '<div style="text-align: center; color: #64748b; padding: 24px;">Không tìm thấy phiên làm việc nào phù hợp.</div>';
-        }
-      }
-
-      document.getElementById('contentContainer').innerHTML = html;
     }
 
     function renderCard(s) {
@@ -774,7 +659,6 @@ class IssuesViewProvider {
           '</div>'
         : '';
 
-      // Footer clean: bỏ VS Code thừa, ghi rõ in: ... • out: ..., khoảng cách thoáng
       const footerMetaRow = '<div class="footer-meta-row">' +
         '<span class="footer-meta-item">' + escapeHtml(s.statusMessage) + '</span>' +
         '<span style="opacity: 0.35;">•</span>' +
@@ -785,7 +669,7 @@ class IssuesViewProvider {
         '<span class="footer-meta-item token">out: ' + escapeHtml(s.outputTokensFormatted) + '</span>' +
         (s.costUSD ? '<span style="opacity: 0.35;">•</span><span class="footer-meta-item cost">' + escapeHtml(s.costUSD) + '</span>' : '') +
         '<span style="opacity: 0.35;">•</span>' +
-        '<span class="footer-meta-item" title="Số lượt trao đổi hội thoại">' + s.turnCount + ' turns</span>' +
+        '<span class="footer-meta-item" title="Số lượt trao đổi hội thoại">' + (s.turnCount || 0) + ' turns</span>' +
         '<span class="footer-meta-item short-id">' + escapeHtml(s.shortId) + '</span>' +
       '</div>';
 
@@ -811,28 +695,163 @@ class IssuesViewProvider {
       '</div>';
     }
 
-    function escapeHtml(text) {
-      if (!text) return '';
-      return text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    function renderSessions() {
+      try {
+        const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        const filtered = allSessions.filter(s => {
+          if (query) {
+            const match = (
+              (s.title && s.title.toLowerCase().includes(query)) ||
+              (s.issueId && s.issueId.toLowerCase().includes(query)) ||
+              (s.repo && s.repo.toLowerCase().includes(query)) ||
+              (s.branch && s.branch.toLowerCase().includes(query)) ||
+              (s.lastUserPrompt && s.lastUserPrompt.toLowerCase().includes(query)) ||
+              (s.lastAssistantResponse && s.lastAssistantResponse.toLowerCase().includes(query))
+            );
+            if (!match) return false;
+          }
+
+          if (currentFilter === 'today') {
+            return s.updatedAt >= startOfToday.getTime();
+          }
+          if (currentFilter === 'active') {
+            return s.status === 'need_accept' || s.status === 'running';
+          }
+          if (currentFilter === 'all') {
+            return true;
+          }
+          return true;
+        });
+
+        const needAcceptList = filtered.filter(s => s.status === 'need_accept');
+        const runningList = filtered.filter(s => s.status === 'running');
+        const doneList = filtered.filter(s => s.status === 'done');
+
+        let html = '';
+
+        if (needAcceptList.length > 0) {
+          const isOpen = query ? true : sectionState.need_accept;
+          html += '<div class="section-header" onclick="toggleSection(\'need_accept\')">' +
+            '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
+              '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+            '</span>' +
+            '<span style="color: #f59e0b; font-weight: 700;">CHỜ DUYỆT</span>' +
+            '<span class="count-badge">' + needAcceptList.length + '</span>' +
+          '</div>' +
+          '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
+          needAcceptList.forEach(s => html += renderCard(s));
+          html += '</div>';
+        }
+
+        if (runningList.length > 0) {
+          const isOpen = query ? true : sectionState.running;
+          html += '<div class="section-header" onclick="toggleSection(\'running\')">' +
+            '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
+              '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+            '</span>' +
+            '<span style="color: #3b82f6; font-weight: 700;">ĐANG CHẠY</span>' +
+            '<span class="count-badge">' + runningList.length + '</span>' +
+          '</div>' +
+          '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
+          runningList.forEach(s => html += renderCard(s));
+          html += '</div>';
+        }
+
+        if (doneList.length > 0) {
+          const isOpen = query ? true : sectionState.done;
+          html += '<div class="section-header" onclick="toggleSection(\'done\')">' +
+            '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
+              '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+            '</span>' +
+            '<span style="color: #10b981; font-weight: 700;">ĐÃ HOÀN THÀNH</span>' +
+            '<span class="count-badge">' + doneList.length + '</span>' +
+          '</div>' +
+          '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
+          doneList.forEach(s => html += renderCard(s));
+          html += '</div>';
+        }
+
+        if (filtered.length === 0) {
+          if (allSessions.length === 0) {
+            html = '<div style="text-align: center; color: #64748b; padding: 24px;">Chưa có phiên làm việc nào được ghi nhận.</div>';
+          } else if (currentFilter === 'today') {
+            html = '<div style="text-align: center; color: #64748b; padding: 24px;">Hôm nay chưa có phiên mới.<br><span style="font-size: 11.5px; opacity: 0.8; margin-top: 4px; display: inline-block;">Bấm tab <b>"Tất cả"</b> để xem lại các phiên trước đó.</span></div>';
+          } else {
+            html = '<div style="text-align: center; color: #64748b; padding: 24px;">Không tìm thấy phiên làm việc nào phù hợp.</div>';
+          }
+        }
+
+        if (contentContainer) {
+          contentContainer.innerHTML = html;
+        }
+      } catch (err) {
+        console.error('Lỗi khi renderSessions:', err);
+      }
     }
 
-    function openSession(id) {
-      vscode.postMessage({ type: 'openSession', id });
+    // 5. Gắn sự kiện (Event Listeners)
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        renderSessions();
+      });
     }
 
-    function approveSession(id) {
-      vscode.postMessage({ type: 'approve', id });
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        const svg = refreshBtn.querySelector('svg');
+        if (svg) svg.classList.add('spin');
+        vscode.postMessage({ type: 'refresh' });
+        setTimeout(() => {
+          if (svg) svg.classList.remove('spin');
+        }, 600);
+      });
     }
 
-    function deleteSession(id, title, encodedPath) {
-      const filePath = decodeURIComponent(encodedPath);
-      vscode.postMessage({ type: 'deleteSession', id, title, filePath });
+    if (settingsBtn) {
+      settingsBtn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'openSettings' });
+      });
     }
+
+    if (updateBtn) {
+      updateBtn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'checkForUpdates' });
+      });
+    }
+
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.getAttribute('data-filter');
+        const state = vscode.getState() || {};
+        state.currentFilter = currentFilter;
+        vscode.setState(state);
+        renderSessions();
+      });
+    });
+
+    window.addEventListener('message', event => {
+      const message = event.data;
+      if (message.type === 'updateSessions') {
+        allSessions = message.sessions || [];
+        const state = vscode.getState() || {};
+        state.sessions = allSessions;
+        vscode.setState(state);
+        renderSessions();
+      }
+    });
+
+    // 6. Khởi động render
+    if (allSessions && allSessions.length > 0) {
+      renderSessions();
+    }
+
+    // Thông báo cho extension biết Webview đã sẵn sàng
+    vscode.postMessage({ type: 'ready' });
   </script>
 </body>
 </html>`;
