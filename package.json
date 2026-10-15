@@ -16,7 +16,7 @@
   },
   "categories": [
     "Other",
-    "Productivity"
+    "SCM Providers"
   ],
   "activationEvents": [
     "onStartupFinished"
