@@ -5,6 +5,7 @@ import { ExtensionUpdater } from './updater';
 export function activate(context: vscode.ExtensionContext) {
   const provider = new IssuesViewProvider(context.extensionUri, context);
 
+  // Đăng ký cho Activity Bar view
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
       IssuesViewProvider.viewType,
@@ -12,9 +13,39 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
+  // Đăng ký cho Explorer view (khi người dùng bật hiển thị trong Explorer)
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      IssuesViewProvider.explorerViewType,
+      provider
+    )
+  );
+
+  // Cập nhật context key khi cài đặt showInExplorer thay đổi
+  const updateExplorerContext = () => {
+    const config = vscode.workspace.getConfiguration('claudeSessionManager');
+    const show = config.get<boolean>('showInExplorer', false);
+    vscode.commands.executeCommand('setContext', 'claudeSessionManager.showInExplorer', show);
+  };
+  updateExplorerContext();
+
   context.subscriptions.push(
     vscode.commands.registerCommand('claudeSessionManager.focusView', () => {
       vscode.commands.executeCommand('claudeSessionManager.issuesView.focus');
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('claudeSessionManager.toggleExplorerView', async () => {
+      const config = vscode.workspace.getConfiguration('claudeSessionManager');
+      const current = config.get<boolean>('showInExplorer', false);
+      const next = !current;
+      await config.update('showInExplorer', next, vscode.ConfigurationTarget.Global);
+      vscode.window.showInformationMessage(
+        next
+          ? 'Đã bật hiển thị Claude Sessions trong thanh Explorer (File Tree).'
+          : 'Đã tắt hiển thị Claude Sessions khỏi thanh Explorer.'
+      );
     })
   );
 
@@ -39,6 +70,9 @@ export function activate(context: vscode.ExtensionContext) {
   // Lắng nghe cấu hình thay đổi để cập nhật tự động
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('claudeSessionManager.showInExplorer')) {
+        updateExplorerContext();
+      }
       if (e.affectsConfiguration('claudeSessionManager')) {
         provider.refresh();
       }

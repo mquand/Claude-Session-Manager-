@@ -8,7 +8,8 @@ class IssuesViewProvider {
     _extensionUri;
     _context;
     static viewType = 'claudeSessionManager.issuesView';
-    _view;
+    static explorerViewType = 'claudeSessionManager.explorerView';
+    _views = new Set();
     _watchers = [];
     _refreshTimer;
     _debounceTimer;
@@ -47,7 +48,10 @@ class IssuesViewProvider {
         };
     }
     resolveWebviewView(webviewView, _context, _token) {
-        this._view = webviewView;
+        this._views.add(webviewView);
+        webviewView.onDidDispose(() => {
+            this._views.delete(webviewView);
+        });
         webviewView.webview.options = {
             enableScripts: true,
             localResourceRoots: [this._extensionUri]
@@ -56,7 +60,7 @@ class IssuesViewProvider {
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible) {
                 if (this._lastSessions.length > 0) {
-                    this._view?.webview.postMessage({
+                    webviewView.webview.postMessage({
                         type: 'updateSessions',
                         sessions: this._lastSessions,
                         reviewedIds: this.getReviewedIds(),
@@ -71,7 +75,7 @@ class IssuesViewProvider {
             switch (data.type) {
                 case 'ready': {
                     if (this._lastSessions.length > 0) {
-                        this._view?.webview.postMessage({
+                        webviewView.webview.postMessage({
                             type: 'updateSessions',
                             sessions: this._lastSessions,
                             reviewedIds: this.getReviewedIds(),
@@ -198,23 +202,23 @@ class IssuesViewProvider {
         const needReviewCount = sessions.filter(s => s.status === 'done' && !this.getReviewedIds().includes(s.id) && s.updatedAt >= startOfToday.getTime()).length;
         const lang = this.getLanguage();
         const currentWorkspace = this.getCurrentWorkspace();
-        if (this._view) {
+        for (const view of this._views) {
             if (needAcceptCount > 0) {
-                this._view.badge = {
+                view.badge = {
                     value: needAcceptCount,
                     tooltip: lang === 'en' ? `${needAcceptCount} tasks waiting approval` : `${needAcceptCount} task đang chờ duyệt`
                 };
             }
             else if (needReviewCount > 0) {
-                this._view.badge = {
+                view.badge = {
                     value: needReviewCount,
                     tooltip: lang === 'en' ? `${needReviewCount} tasks need review` : `${needReviewCount} task cần review`
                 };
             }
             else {
-                this._view.badge = undefined;
+                view.badge = undefined;
             }
-            this._view.webview.postMessage({
+            view.webview.postMessage({
                 type: 'updateSessions',
                 sessions,
                 reviewedIds: this.getReviewedIds(),
@@ -282,7 +286,7 @@ class IssuesViewProvider {
       box-sizing: border-box;
       overflow-y: auto;
       overflow-x: hidden;
-      min-height: 100vh;
+      min-height: 100%;
     }
 
     ::-webkit-scrollbar {

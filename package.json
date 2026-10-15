@@ -2,7 +2,7 @@
   "name": "claude-session-manager",
   "displayName": "Claude Session & Issue Manager",
   "description": "Quản lý các issue, session, và trạng thái hội thoại của Claude trực tiếp trên VS Code",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "publisher": "mquand",
   "author": "mquand",
   "license": "MIT",
@@ -39,6 +39,14 @@
           "id": "claudeSessionManager.issuesView",
           "name": "Claude Issue Sessions"
         }
+      ],
+      "explorer": [
+        {
+          "type": "webview",
+          "id": "claudeSessionManager.explorerView",
+          "name": "Claude Sessions",
+          "when": "config.claudeSessionManager.showInExplorer"
+        }
       ]
     },
     "commands": [
@@ -55,6 +63,10 @@
         "command": "claudeSessionManager.checkForUpdates",
         "title": "Kiểm tra bản cập nhật mới (GitHub Releases)",
         "icon": "$(cloud-download)"
+      },
+      {
+        "command": "claudeSessionManager.toggleExplorerView",
+        "title": "Bật/Tắt hiển thị Claude Sessions trong thanh Explorer (File Tree)"
       }
     ],
     "configuration": {
@@ -79,6 +91,11 @@
           ],
           "default": "auto",
           "description": "Ngôn ngữ hiển thị giao diện (Interface language: auto / vi / en)"
+        },
+        "claudeSessionManager.showInExplorer": {
+          "type": "boolean",
+          "default": false,
+          "description": "Hiển thị Claude Sessions trong thanh Explorer (File Tree) bên cạnh Open Editors, Timeline... / Show Claude Sessions in the Explorer view"
         }
       }
     }

@@ -5,7 +5,8 @@ import { ExtensionUpdater } from './updater';
 
 export class IssuesViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'claudeSessionManager.issuesView';
-  private _view?: vscode.WebviewView;
+  public static readonly explorerViewType = 'claudeSessionManager.explorerView';
+  private _views: Set<vscode.WebviewView> = new Set();
   private _watchers: vscode.FileSystemWatcher[] = [];
   private _refreshTimer?: NodeJS.Timeout;
   private _debounceTimer?: NodeJS.Timeout;
@@ -53,7 +54,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     _context: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken
   ) {
-    this._view = webviewView;
+    this._views.add(webviewView);
+
+    webviewView.onDidDispose(() => {
+      this._views.delete(webviewView);
+    });
 
     webviewView.webview.options = {
       enableScripts: true,
@@ -65,7 +70,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible) {
         if (this._lastSessions.length > 0) {
-          this._view?.webview.postMessage({
+          webviewView.webview.postMessage({
             type: 'updateSessions',
             sessions: this._lastSessions,
             reviewedIds: this.getReviewedIds(),
@@ -81,7 +86,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       switch (data.type) {
         case 'ready': {
           if (this._lastSessions.length > 0) {
-            this._view?.webview.postMessage({
+            webviewView.webview.postMessage({
               type: 'updateSessions',
               sessions: this._lastSessions,
               reviewedIds: this.getReviewedIds(),
@@ -224,21 +229,21 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     const lang = this.getLanguage();
     const currentWorkspace = this.getCurrentWorkspace();
 
-    if (this._view) {
+    for (const view of this._views) {
       if (needAcceptCount > 0) {
-        this._view.badge = {
+        view.badge = {
           value: needAcceptCount,
           tooltip: lang === 'en' ? `${needAcceptCount} tasks waiting approval` : `${needAcceptCount} task đang chờ duyệt`
         };
       } else if (needReviewCount > 0) {
-        this._view.badge = {
+        view.badge = {
           value: needReviewCount,
           tooltip: lang === 'en' ? `${needReviewCount} tasks need review` : `${needReviewCount} task cần review`
         };
       } else {
-        this._view.badge = undefined;
+        view.badge = undefined;
       }
-      this._view.webview.postMessage({
+      view.webview.postMessage({
         type: 'updateSessions',
         sessions,
         reviewedIds: this.getReviewedIds(),
@@ -305,7 +310,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       box-sizing: border-box;
       overflow-y: auto;
       overflow-x: hidden;
-      min-height: 100vh;
+      min-height: 100%;
     }
 
     ::-webkit-scrollbar {
