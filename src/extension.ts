@@ -45,6 +45,15 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // Tự động làm mới khi người dùng mở lại máy (wake from sleep) hoặc focus vào VS Code
+  context.subscriptions.push(
+    vscode.window.onDidChangeWindowState(e => {
+      if (e.focused) {
+        provider.refresh();
+      }
+    })
+  );
+
   // Tự động kiểm tra bản cập nhật mới trên GitHub sau 3.5 giây
   setTimeout(() => {
     ExtensionUpdater.checkForUpdates(context, false);

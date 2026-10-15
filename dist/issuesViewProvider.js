@@ -13,6 +13,7 @@ class IssuesViewProvider {
     _refreshTimer;
     _debounceTimer;
     _statusBarItem;
+    _lastSessions = [];
     constructor(_extensionUri, _context) {
         this._extensionUri = _extensionUri;
         this._context = _context;
@@ -29,8 +30,23 @@ class IssuesViewProvider {
             localResourceRoots: [this._extensionUri]
         };
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+        webviewView.onDidChangeVisibility(() => {
+            if (webviewView.visible) {
+                if (this._lastSessions.length > 0) {
+                    this._view?.webview.postMessage({ type: 'updateSessions', sessions: this._lastSessions });
+                }
+                this.refresh();
+            }
+        });
         webviewView.webview.onDidReceiveMessage(async (data) => {
             switch (data.type) {
+                case 'ready': {
+                    if (this._lastSessions.length > 0) {
+                        this._view?.webview.postMessage({ type: 'updateSessions', sessions: this._lastSessions });
+                    }
+                    await this.refresh();
+                    break;
+                }
                 case 'refresh': {
                     await this.refresh();
                     break;
@@ -122,6 +138,7 @@ class IssuesViewProvider {
         const config = vscode.workspace.getConfiguration('claudeSessionManager');
         const customPath = config.get('storagePath');
         const sessions = await scanner_1.SessionScanner.scanSessions(customPath);
+        this._lastSessions = sessions;
         const needAcceptCount = sessions.filter(s => s.status === 'need_accept').length;
         const runningCount = sessions.filter(s => s.status === 'running').length;
         if (this._view) {
@@ -266,12 +283,13 @@ class IssuesViewProvider {
       color: #94a3b8;
       border: 1px solid #2d3340;
       border-radius: 4px;
-      padding: 5px 8px;
+      padding: 5px 4px;
       font-size: 11px;
       font-weight: 500;
       cursor: pointer;
       text-align: center;
       transition: all 0.15s ease;
+      white-space: nowrap;
     }
 
     .filter-btn:hover {
@@ -558,10 +576,11 @@ class IssuesViewProvider {
     </button>
   </div>
 
-  <!-- 2 Tab Tối Giản -->
+  <!-- 3 Tab Lọc: Hôm nay, Đang hoạt động, Tất cả -->
   <div class="filter-tabs">
     <button class="filter-btn active" data-filter="today">Hôm nay</button>
-    <button class="filter-btn" data-filter="active">Đang hoạt động / Chờ duyệt</button>
+    <button class="filter-btn" data-filter="active">Đang hoạt động</button>
+    <button class="filter-btn" data-filter="all">Tất cả</button>
   </div>
 
   <div id="contentContainer">
@@ -570,13 +589,39 @@ class IssuesViewProvider {
 
   <script>
     const vscode = acquireVsCodeApi();
-    let allSessions = [];
-    let currentFilter = 'today';
+    const savedState = vscode.getState() || {};
+    let allSessions = savedState.sessions || [];
+    let currentFilter = savedState.currentFilter || 'today';
+    let sectionState = savedState.sectionState || {
+      need_accept: true,
+      running: true,
+      done: true
+    };
+
+    // Khôi phục tab đang chọn từ state
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      if (btn.getAttribute('data-filter') === currentFilter) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+
+    // Nếu đã có dữ liệu cache từ trước, render ngay lập tức (0ms)
+    if (allSessions && allSessions.length > 0) {
+      renderSessions();
+    }
+
+    // Báo cho backend extension biết Webview đã sẵn sàng nhận dữ liệu mới nhất
+    vscode.postMessage({ type: 'ready' });
 
     window.addEventListener('message', event => {
       const message = event.data;
       if (message.type === 'updateSessions') {
-        allSessions = message.sessions;
+        allSessions = message.sessions || [];
+        const state = vscode.getState() || {};
+        state.sessions = allSessions;
+        vscode.setState(state);
         renderSessions();
       }
     });
@@ -613,15 +658,12 @@ class IssuesViewProvider {
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentFilter = btn.getAttribute('data-filter');
+        const state = vscode.getState() || {};
+        state.currentFilter = currentFilter;
+        vscode.setState(state);
         renderSessions();
       });
     });
-
-    let sectionState = (vscode.getState() && vscode.getState().sectionState) || {
-      need_accept: true,
-      running: true,
-      done: true
-    };
 
     function toggleSection(key) {
       sectionState[key] = !sectionState[key];
@@ -654,6 +696,9 @@ class IssuesViewProvider {
         }
         if (currentFilter === 'active') {
           return s.status === 'need_accept' || s.status === 'running';
+        }
+        if (currentFilter === 'all') {
+          return true;
         }
         return true;
       });
@@ -707,7 +752,13 @@ class IssuesViewProvider {
       }
 
       if (filtered.length === 0) {
-        html = '<div style="text-align: center; color: #64748b; padding: 24px;">Không tìm thấy session nào.</div>';
+        if (allSessions.length === 0) {
+          html = '<div style="text-align: center; color: #64748b; padding: 24px;">Chưa có phiên làm việc nào được ghi nhận.</div>';
+        } else if (currentFilter === 'today') {
+          html = '<div style="text-align: center; color: #64748b; padding: 24px;">Hôm nay chưa có phiên mới.<br><span style="font-size: 11.5px; opacity: 0.8; margin-top: 4px; display: inline-block;">Bấm tab <b>"Tất cả"</b> để xem lại các phiên trước đó.</span></div>';
+        } else {
+          html = '<div style="text-align: center; color: #64748b; padding: 24px;">Không tìm thấy phiên làm việc nào phù hợp.</div>';
+        }
       }
 
       document.getElementById('contentContainer').innerHTML = html;

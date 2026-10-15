@@ -26,6 +26,12 @@ function activate(context) {
             provider.refresh();
         }
     }));
+    // Tự động làm mới khi người dùng mở lại máy (wake from sleep) hoặc focus vào VS Code
+    context.subscriptions.push(vscode.window.onDidChangeWindowState(e => {
+        if (e.focused) {
+            provider.refresh();
+        }
+    }));
     // Tự động kiểm tra bản cập nhật mới trên GitHub sau 3.5 giây
     setTimeout(() => {
         updater_1.ExtensionUpdater.checkForUpdates(context, false);
