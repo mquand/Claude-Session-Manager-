@@ -6,7 +6,7 @@ import { ExtensionUpdater } from './updater';
 
 export class IssuesViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'claudeSessionManager.issuesView';
-  public static readonly explorerViewType = 'claudeSessionManager.explorerView';
+  public static readonly explorerViewType = 'claudeSessionManager.sessionExplorer';
   private _views: Set<vscode.WebviewView> = new Set();
   private _watchers: vscode.FileSystemWatcher[] = [];
   private _refreshTimer?: NodeJS.Timeout;
@@ -347,21 +347,87 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
   <title>Claude Issue Manager</title>
   <style>
     :root {
-      --bg-color: #0f1115;
-      --card-bg: #16191f;
-      --card-border: #232730;
-      --text-main: #f1f5f9;
-      --text-muted: #8b9bb4;
-      --tag-bg: #1e232d;
+      --bg-color: var(--vscode-sideBar-background, #0f1115);
+      --card-bg: var(--vscode-editorWidget-background, #16191f);
+      --card-border: var(--vscode-widget-border, #232730);
+      --card-hover-bg: var(--vscode-list-hoverBackground, #1c212a);
+      --card-hover-border: var(--vscode-focusBorder, #3e4657);
+      --text-main: var(--vscode-foreground, #f1f5f9);
+      --text-muted: var(--vscode-descriptionForeground, #8b9bb4);
+      --input-bg: var(--vscode-input-background, #1a1e26);
+      --input-fg: var(--vscode-input-foreground, #ffffff);
+      --input-border: var(--vscode-input-border, #2d3340);
+      --btn-bg: var(--vscode-button-background, #2563eb);
+      --btn-fg: var(--vscode-button-foreground, #ffffff);
+      --btn-hover: var(--vscode-button-hoverBackground, #1d4ed8);
+      --btn-sec-bg: var(--vscode-button-secondaryBackground, #2d3340);
+      --btn-sec-fg: var(--vscode-button-secondaryForeground, #ffffff);
+      --btn-sec-hover: var(--vscode-button-secondaryHoverBackground, #3e4657);
+      --pill-bg: #16191f;
+      --pill-fg: #94a3b8;
+      --pill-border: #232730;
+      --pill-hover-bg: #1e232d;
+      --pill-hover-fg: #cbd5e1;
+      --token-badge-bg: rgba(30, 35, 45, 0.7);
+      --token-badge-border: rgba(255, 255, 255, 0.08);
+      --token-badge-num: #38bdf8;
+      --repo-badge-bg: #252b38;
+      --repo-badge-fg: #93c5fd;
+      --issue-badge-bg: #1e3a5f;
+      --issue-badge-fg: #60a5fa;
+      --branch-name-fg: #7dd3fc;
+      --count-badge-bg: #232834;
+      --count-badge-fg: #cbd5e1;
+      --short-id-fg: #556275;
       --need-accept: #f59e0b;
       --done: #10b981;
       --running: #3b82f6;
       --need-review: #a855f7;
     }
 
+    body.vscode-light {
+      --bg-color: var(--vscode-sideBar-background, #f8fafc);
+      --card-bg: var(--vscode-editor-background, #ffffff);
+      --card-border: var(--vscode-widget-border, #e2e8f0);
+      --card-hover-bg: var(--vscode-list-hoverBackground, #f1f5f9);
+      --card-hover-border: var(--vscode-focusBorder, #94a3b8);
+      --text-main: var(--vscode-foreground, #0f172a);
+      --text-muted: var(--vscode-descriptionForeground, #64748b);
+      --input-bg: var(--vscode-input-background, #ffffff);
+      --input-fg: var(--vscode-input-foreground, #0f172a);
+      --input-border: var(--vscode-input-border, #cbd5e1);
+      --btn-bg: var(--vscode-button-background, #2563eb);
+      --btn-fg: var(--vscode-button-foreground, #ffffff);
+      --btn-hover: var(--vscode-button-hoverBackground, #1d4ed8);
+      --btn-sec-bg: var(--vscode-button-secondaryBackground, #e2e8f0);
+      --btn-sec-fg: var(--vscode-button-secondaryForeground, #1e293b);
+      --btn-sec-hover: var(--vscode-button-secondaryHoverBackground, #cbd5e1);
+      --pill-bg: #f1f5f9;
+      --pill-fg: #475569;
+      --pill-border: #cbd5e1;
+      --pill-hover-bg: #e2e8f0;
+      --pill-hover-fg: #0f172a;
+      --token-badge-bg: rgba(0, 0, 0, 0.05);
+      --token-badge-border: rgba(0, 0, 0, 0.1);
+      --token-badge-num: #0284c7;
+      --repo-badge-bg: #e0f2fe;
+      --repo-badge-fg: #0369a1;
+      --issue-badge-bg: #dbeafe;
+      --issue-badge-fg: #1d4ed8;
+      --branch-name-fg: #0284c7;
+      --count-badge-bg: #e2e8f0;
+      --count-badge-fg: #334155;
+      --short-id-fg: #94a3b8;
+    }
+
+    body.vscode-high-contrast {
+      --card-border: var(--vscode-contrastBorder, #ffffff);
+      --card-hover-border: var(--vscode-focusBorder, #f38518);
+    }
+
     body {
-      background-color: var(--vscode-sideBar-background, var(--bg-color));
-      color: var(--vscode-sideBar-foreground, var(--text-main));
+      background-color: var(--bg-color);
+      color: var(--text-main);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       margin: 0;
       padding: 10px 10px 36px 10px;
@@ -379,11 +445,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       background: transparent;
     }
     ::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.12);
+      background: rgba(128, 128, 128, 0.25);
       border-radius: 4px;
     }
     ::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.25);
+      background: rgba(128, 128, 128, 0.45);
     }
 
     .search-bar-row {
@@ -395,9 +461,9 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
 
     .search-input {
       flex: 1;
-      background: var(--vscode-input-background, #1a1e26);
-      color: var(--vscode-input-foreground, #fff);
-      border: 1px solid var(--vscode-input-border, #2d3340);
+      background: var(--input-bg);
+      color: var(--input-fg);
+      border: 1px solid var(--input-border);
       border-radius: 4px;
       padding: 6px 10px;
       font-size: 12px;
@@ -411,9 +477,9 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .icon-tool-btn {
-      background: #1a1e26;
-      color: #94a3b8;
-      border: 1px solid var(--vscode-input-border, #2d3340);
+      background: var(--input-bg);
+      color: var(--text-muted);
+      border: 1px solid var(--input-border);
       border-radius: 4px;
       width: 28px;
       height: 28px;
@@ -427,9 +493,9 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .icon-tool-btn:hover {
-      background: #232834;
-      color: #ffffff;
-      border-color: #3e4657;
+      background: var(--pill-hover-bg);
+      color: var(--text-main);
+      border-color: var(--card-hover-border);
     }
 
     .icon-tool-btn:active {
@@ -467,8 +533,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       align-items: center;
       gap: 4px;
       font-size: 11px;
-      background: rgba(30, 35, 45, 0.7);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--token-badge-bg);
+      border: 1px solid var(--token-badge-border);
       border-radius: 12px;
       padding: 2px 8px;
       white-space: nowrap;
@@ -478,22 +544,22 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .ws-tokens-label {
-      color: #64748b;
+      color: var(--text-muted);
       font-size: 10.5px;
       font-weight: 500;
     }
 
     .ws-tokens-num {
-      color: #38bdf8;
+      color: var(--token-badge-num);
       font-weight: 600;
       font-family: monospace;
       font-size: 11px;
     }
 
     .ws-pill {
-      background: #16191f;
-      color: #94a3b8;
-      border: 1px solid #232730;
+      background: var(--pill-bg);
+      color: var(--pill-fg);
+      border: 1px solid var(--pill-border);
       border-radius: 12px;
       padding: 2px 8px;
       font-size: 11px;
@@ -508,14 +574,14 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .ws-pill:hover {
-      background: #1e232d;
-      color: #cbd5e1;
-      border-color: #3b4252;
+      background: var(--pill-hover-bg);
+      color: var(--pill-hover-fg);
+      border-color: var(--card-hover-border);
     }
 
     .ws-pill.active {
       background: rgba(59, 130, 246, 0.15);
-      color: #60a5fa;
+      color: #3b82f6;
       border-color: rgba(59, 130, 246, 0.4);
       font-weight: 600;
     }
@@ -536,9 +602,9 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
 
     .filter-btn {
       flex: 1;
-      background: #1a1e26;
-      color: #94a3b8;
-      border: 1px solid #2d3340;
+      background: var(--input-bg);
+      color: var(--text-muted);
+      border: 1px solid var(--input-border);
       border-radius: 4px;
       padding: 5px 2px;
       font-size: 11px;
@@ -550,14 +616,14 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .filter-btn:hover {
-      background: #232834;
-      color: #fff;
+      background: var(--pill-hover-bg);
+      color: var(--text-main);
     }
 
     .filter-btn.active {
-      background: #2563eb;
-      color: #ffffff;
-      border-color: #3b82f6;
+      background: var(--btn-bg);
+      color: var(--btn-fg);
+      border-color: var(--btn-bg);
       font-weight: 600;
     }
 
@@ -579,7 +645,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .section-header:hover {
-      background: rgba(255, 255, 255, 0.05);
+      background: var(--pill-hover-bg);
     }
 
     .section-header .chevron {
@@ -587,7 +653,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       align-items: center;
       justify-content: center;
       transition: transform 0.18s ease;
-      color: #94a3b8;
+      color: var(--text-muted);
     }
 
     .section-header .chevron.open {
@@ -609,8 +675,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     .count-badge {
       font-size: 10.5px;
       font-weight: 600;
-      color: #cbd5e1;
-      background: #232834;
+      color: var(--count-badge-fg);
+      background: var(--count-badge-bg);
       padding: 1px 6px;
       border-radius: 10px;
       margin-left: auto;
@@ -625,6 +691,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       cursor: pointer;
       transition: all 0.15s ease;
       border-left: 4px solid var(--card-border);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     }
 
     .session-card.status-need_accept {
@@ -644,8 +711,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .session-card:hover {
-      border-color: #3e4657;
-      background: #1c212a;
+      border-color: var(--card-hover-border);
+      background: var(--card-hover-bg);
     }
 
     .card-header {
@@ -676,8 +743,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .review-badge {
-      background: rgba(168, 85, 247, 0.2);
-      color: #c084fc;
+      background: rgba(168, 85, 247, 0.18);
+      color: #9333ea;
       border: 1px solid rgba(168, 85, 247, 0.35);
       padding: 1px 6px;
       border-radius: 4px;
@@ -687,6 +754,10 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       display: inline-flex;
       align-items: center;
       gap: 3px;
+    }
+
+    body.vscode-dark .review-badge {
+      color: #c084fc;
     }
 
     .btn-review {
@@ -719,8 +790,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .repo-badge {
-      background: #252b38;
-      color: #93c5fd;
+      background: var(--repo-badge-bg);
+      color: var(--repo-badge-fg);
       padding: 2px 7px;
       border-radius: 4px;
       font-size: 11px;
@@ -730,7 +801,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .branch-info {
-      color: #94a3b8;
+      color: var(--text-muted);
       font-size: 11px;
       display: inline-flex;
       align-items: center;
@@ -739,7 +810,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .branch-name {
-      color: #7dd3fc;
+      color: var(--branch-name-fg);
       font-family: monospace;
       font-weight: 600;
       max-width: 180px;
@@ -752,7 +823,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
 
     .worktree-badge {
       background: rgba(245, 158, 11, 0.15);
-      color: #fbbf24;
+      color: #d97706;
       border: 1px solid rgba(245, 158, 11, 0.3);
       padding: 1px 4px;
       border-radius: 3px;
@@ -763,8 +834,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .issue-badge {
-      background: #1e3a5f;
-      color: #60a5fa;
+      background: var(--issue-badge-bg);
+      color: var(--issue-badge-fg);
       padding: 2px 7px;
       border-radius: 4px;
       font-size: 11.5px;
@@ -774,7 +845,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
 
     .title-text {
       font-weight: 600;
-      color: #f1f5f9;
+      color: var(--text-main);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -785,7 +856,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     .card-delete-btn {
       background: transparent;
       border: none;
-      color: #64748b;
+      color: var(--text-muted);
       cursor: pointer;
       padding: 2px 4px;
       border-radius: 4px;
@@ -809,7 +880,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .user-prompt {
-      color: #94a3b8;
+      color: var(--text-muted);
       font-size: 12px;
       margin: 8px 0 10px 0;
       line-height: 1.5;
@@ -818,16 +889,36 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       text-overflow: ellipsis;
     }
 
-    /* Clean Footer với khoảng cách thoáng đãng */
+    /* Clean Footer với 2 hàng cân đối, thoáng đãng */
     .footer-meta-row {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 10px;
+      line-height: 1.4;
+    }
+
+    .footer-stats-row {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
+      gap: 6px;
+    }
+
+    .footer-bottom-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       gap: 8px;
-      font-size: 11.5px;
-      color: #7d8b9f;
-      margin-top: 10px;
-      line-height: 1.4;
+    }
+
+    .footer-bottom-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
     }
 
     .footer-meta-item {
@@ -837,18 +928,23 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .footer-meta-item.token {
-      color: #94a3b8;
+      color: var(--text-muted);
     }
 
     .footer-meta-item.cost {
-      color: #34d399;
+      color: #059669;
       font-weight: 600;
     }
 
+    body.vscode-dark .footer-meta-item.cost {
+      color: #34d399;
+    }
+
     .footer-meta-item.short-id {
-      color: #556275;
+      color: var(--short-id-fg);
       font-family: monospace;
       margin-left: auto;
+      flex-shrink: 0;
     }
 
     .card-actions {
@@ -859,8 +955,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .btn {
-      background: #2563eb;
-      color: #ffffff;
+      background: var(--btn-bg);
+      color: var(--btn-fg);
       border: none;
       border-radius: 3px;
       padding: 3px 8px;
@@ -870,14 +966,15 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .btn:hover {
-      background: #1d4ed8;
+      background: var(--btn-hover);
     }
 
     .btn-secondary {
-      background: #2d3340;
+      background: var(--btn-sec-bg);
+      color: var(--btn-sec-fg);
     }
     .btn-secondary:hover {
-      background: #3e4657;
+      background: var(--btn-sec-hover);
     }
   </style>
 </head>
@@ -900,12 +997,12 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
   <!-- Thanh chọn Workspace / Dự án & Thống kê Token hôm nay -->
   <div class="workspace-bar" id="workspaceBar">
     <div class="ws-pills-wrap">
+      <button class="ws-pill" id="wsBtnAll">
+        <span id="wsAllText">Tất cả dự án</span>
+      </button>
       <button class="ws-pill active" id="wsBtnCurrent" style="display: none;">
         <span class="ws-dot"></span>
         <span id="wsCurrentName"></span>
-      </button>
-      <button class="ws-pill" id="wsBtnAll">
-        <span id="wsAllText">Tất cả dự án</span>
       </button>
     </div>
     <div class="ws-tokens-badge" id="wsTokensBadge" title="Tổng số token Claude đã dùng hôm nay">
@@ -914,11 +1011,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     </div>
   </div>
 
-  <!-- 3 Tab Lọc: Đang chạy, Hôm nay, Tất cả -->
+  <!-- 3 Tab Lọc: Tất cả > Hôm nay > Đang chạy -->
   <div class="filter-tabs">
-    <button class="filter-btn active" data-filter="active" id="tabActiveBtn">Đang chạy</button>
-    <button class="filter-btn" data-filter="today" id="tabTodayBtn">Hôm nay</button>
     <button class="filter-btn" data-filter="all" id="tabAllBtn">Tất cả</button>
+    <button class="filter-btn active" data-filter="today" id="tabTodayBtn">Hôm nay</button>
+    <button class="filter-btn" data-filter="active" id="tabActiveBtn">Đang chạy</button>
   </div>
 
   <div id="contentContainer">
@@ -1107,23 +1204,26 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>' +
           'branch: <span class="branch-name">' + escapeHtml(s.branch) + '</span>' +
         '</span>' +
-        (s.isWorktree ? '<span class="worktree-badge">worktree</span>' : '') +
-        '<span style="opacity: 0.35;">•</span>'
+        (s.isWorktree ? '<span class="worktree-badge">worktree</span>' : '')
       ) : '';
 
       const footerMetaRow = '<div class="footer-meta-row">' +
-        branchFooterItem +
-        '<span class="footer-meta-item">' + escapeHtml(s.statusMessage) + '</span>' +
-        '<span style="opacity: 0.35;">•</span>' +
-        '<span class="footer-meta-item">' + escapeHtml(s.modelName) + '</span>' +
-        '<span style="opacity: 0.35;">•</span>' +
-        '<span class="footer-meta-item token">in: ' + escapeHtml(s.inputTokensFormatted) + '</span>' +
-        '<span style="opacity: 0.35;">•</span>' +
-        '<span class="footer-meta-item token">out: ' + escapeHtml(s.outputTokensFormatted) + '</span>' +
-        (s.costUSD ? '<span style="opacity: 0.35;">•</span><span class="footer-meta-item cost">' + escapeHtml(s.costUSD) + '</span>' : '') +
-        '<span style="opacity: 0.35;">•</span>' +
-        '<span class="footer-meta-item" title="Số lượt trao đổi hội thoại">' + (s.turnCount || 0) + ' turns</span>' +
-        '<span class="footer-meta-item short-id">' + escapeHtml(s.shortId) + '</span>' +
+        '<div class="footer-stats-row">' +
+          '<span class="footer-meta-item">' + escapeHtml(s.statusMessage) + '</span>' +
+          '<span style="opacity: 0.35;">•</span>' +
+          '<span class="footer-meta-item">' + escapeHtml(s.modelName) + '</span>' +
+          '<span style="opacity: 0.35;">•</span>' +
+          '<span class="footer-meta-item token">in: ' + escapeHtml(s.inputTokensFormatted) + '</span>' +
+          '<span style="opacity: 0.35;">•</span>' +
+          '<span class="footer-meta-item token">out: ' + escapeHtml(s.outputTokensFormatted) + '</span>' +
+          (s.costUSD ? '<span style="opacity: 0.35;">•</span><span class="footer-meta-item cost">' + escapeHtml(s.costUSD) + '</span>' : '') +
+          '<span style="opacity: 0.35;">•</span>' +
+          '<span class="footer-meta-item" title="Số lượt trao đổi hội thoại">' + (s.turnCount || 0) + ' turns</span>' +
+        '</div>' +
+        '<div class="footer-bottom-row">' +
+          '<div class="footer-bottom-left">' + branchFooterItem + '</div>' +
+          '<span class="footer-meta-item short-id">' + escapeHtml(s.shortId) + '</span>' +
+        '</div>' +
       '</div>';
 
       return '<div class="session-card ' + cardStatusClass + '" data-action="open" data-id="' + s.id + '">' +
@@ -1141,7 +1241,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
                 '</svg>' +
               '</button>' +
             '</div>' +
-            (s.lastUserPrompt ? '<div class="user-prompt">' + escapeHtml(s.lastUserPrompt) + '</div>' : '') +
+            (s.lastUserPrompt ? '<div class="user-prompt">&gt; ' + escapeHtml(s.lastUserPrompt.replace(/^>\s*/, '')) + '</div>' : '') +
             actionButtons +
             footerMetaRow +
           '</div>' +

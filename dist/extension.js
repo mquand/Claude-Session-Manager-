@@ -14,7 +14,7 @@ function activate(context) {
     // Cập nhật context key khi cài đặt showInExplorer thay đổi
     const updateExplorerContext = () => {
         const config = vscode.workspace.getConfiguration('claudeSessionManager');
-        const show = config.get('showInExplorer', false);
+        const show = config.get('showInExplorer', true);
         vscode.commands.executeCommand('setContext', 'claudeSessionManager.showInExplorer', show);
     };
     updateExplorerContext();
