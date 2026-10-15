@@ -21,6 +21,31 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     this._statusBarItem.text = '$(sparkle) Claude: Idle';
     this._statusBarItem.tooltip = 'Claude Session & Issue Manager';
     this._statusBarItem.show();
+
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('claudeSessionManager')) {
+        this.refresh();
+      }
+    });
+  }
+
+  private getLanguage(): 'vi' | 'en' {
+    const config = vscode.workspace.getConfiguration('claudeSessionManager');
+    const setting = config.get<string>('language') || 'auto';
+    if (setting === 'vi' || setting === 'en') {
+      return setting;
+    }
+    const envLang = vscode.env.language || '';
+    return envLang.toLowerCase().startsWith('vi') ? 'vi' : 'en';
+  }
+
+  private getCurrentWorkspace(): { name: string; folderPath?: string } | undefined {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) return undefined;
+    return {
+      name: folders[0].name,
+      folderPath: folders[0].uri.fsPath
+    };
   }
 
   public resolveWebviewView(
@@ -43,7 +68,9 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           this._view?.webview.postMessage({
             type: 'updateSessions',
             sessions: this._lastSessions,
-            reviewedIds: this.getReviewedIds()
+            reviewedIds: this.getReviewedIds(),
+            currentWorkspace: this.getCurrentWorkspace(),
+            lang: this.getLanguage()
           });
         }
         this.refresh();
@@ -57,7 +84,9 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
             this._view?.webview.postMessage({
               type: 'updateSessions',
               sessions: this._lastSessions,
-              reviewedIds: this.getReviewedIds()
+              reviewedIds: this.getReviewedIds(),
+              currentWorkspace: this.getCurrentWorkspace(),
+              lang: this.getLanguage()
             });
           }
           await this.refresh();
@@ -183,34 +212,65 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     const sessions = await SessionScanner.scanSessions(customPath);
     this._lastSessions = sessions;
 
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
     const needAcceptCount = sessions.filter(s => s.status === 'need_accept').length;
     const runningCount = sessions.filter(s => s.status === 'running').length;
+    const needReviewCount = sessions.filter(s =>
+      s.status === 'done' && !this.getReviewedIds().includes(s.id) && s.updatedAt >= startOfToday.getTime()
+    ).length;
+
+    const lang = this.getLanguage();
+    const currentWorkspace = this.getCurrentWorkspace();
 
     if (this._view) {
       if (needAcceptCount > 0) {
-        this._view.badge = { value: needAcceptCount, tooltip: `${needAcceptCount} task đang chờ duyệt` };
+        this._view.badge = {
+          value: needAcceptCount,
+          tooltip: lang === 'en' ? `${needAcceptCount} tasks waiting approval` : `${needAcceptCount} task đang chờ duyệt`
+        };
+      } else if (needReviewCount > 0) {
+        this._view.badge = {
+          value: needReviewCount,
+          tooltip: lang === 'en' ? `${needReviewCount} tasks need review` : `${needReviewCount} task cần review`
+        };
       } else {
         this._view.badge = undefined;
       }
       this._view.webview.postMessage({
         type: 'updateSessions',
         sessions,
-        reviewedIds: this.getReviewedIds()
+        reviewedIds: this.getReviewedIds(),
+        currentWorkspace,
+        lang
       });
     }
 
     if (needAcceptCount > 0) {
-      this._statusBarItem.text = `$(bell-dot) Claude: ${needAcceptCount} Chờ duyệt`;
+      this._statusBarItem.text = `$(bell-dot) Claude: ${needAcceptCount} ${lang === 'en' ? 'Waiting' : 'Chờ duyệt'}`;
       this._statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
-      this._statusBarItem.tooltip = `Có ${needAcceptCount} task đang chờ bạn phê duyệt. Nhấp để mở.`;
+      this._statusBarItem.tooltip = lang === 'en'
+        ? `There are ${needAcceptCount} tasks waiting for your approval. Click to open.`
+        : `Có ${needAcceptCount} task đang chờ bạn phê duyệt. Nhấp để mở.`;
     } else if (runningCount > 0) {
-      this._statusBarItem.text = `$(sync~spin) Claude: ${runningCount} Đang chạy`;
+      this._statusBarItem.text = `$(sync~spin) Claude: ${runningCount} ${lang === 'en' ? 'Running' : 'Đang chạy'}`;
       this._statusBarItem.backgroundColor = undefined;
-      this._statusBarItem.tooltip = `${runningCount} task đang thực thi. Nhấp để mở.`;
+      this._statusBarItem.tooltip = lang === 'en'
+        ? `${runningCount} tasks currently running. Click to open.`
+        : `${runningCount} task đang thực thi. Nhấp để mở.`;
+    } else if (needReviewCount > 0) {
+      this._statusBarItem.text = `$(eye) Claude: ${needReviewCount} ${lang === 'en' ? 'Review' : 'Cần review'}`;
+      this._statusBarItem.backgroundColor = undefined;
+      this._statusBarItem.tooltip = lang === 'en'
+        ? `${needReviewCount} tasks finished and need your review. Click to open.`
+        : `${needReviewCount} task Claude vừa hoàn thành cần review. Nhấp để mở.`;
     } else {
-      this._statusBarItem.text = `$(sparkle) Claude: ${sessions.length} Tasks`;
+      this._statusBarItem.text = '$(sparkle) Claude: Idle';
       this._statusBarItem.backgroundColor = undefined;
-      this._statusBarItem.tooltip = `Danh sách ${sessions.length} tasks. Nhấp để mở.`;
+      this._statusBarItem.tooltip = lang === 'en'
+        ? 'Claude Session Manager (Idle). Click to open.'
+        : 'Claude Session Manager (Sẵn sàng). Nhấp để mở.';
     }
   }
 
@@ -320,9 +380,55 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       100% { transform: rotate(360deg); }
     }
 
+    .workspace-bar {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 8px;
+      padding: 1px 0;
+      overflow-x: auto;
+    }
+
+    .ws-pill {
+      background: #16191f;
+      color: #94a3b8;
+      border: 1px solid #232730;
+      border-radius: 12px;
+      padding: 2px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .ws-pill:hover {
+      background: #1e232d;
+      color: #cbd5e1;
+      border-color: #3b4252;
+    }
+
+    .ws-pill.active {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60a5fa;
+      border-color: rgba(59, 130, 246, 0.4);
+      font-weight: 600;
+    }
+
+    .ws-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #3b82f6;
+      display: inline-block;
+    }
+
     .filter-tabs {
       display: flex;
-      gap: 6px;
+      gap: 4px;
       margin-bottom: 10px;
     }
 
@@ -332,7 +438,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       color: #94a3b8;
       border: 1px solid #2d3340;
       border-radius: 4px;
-      padding: 5px 4px;
+      padding: 5px 2px;
       font-size: 11px;
       font-weight: 500;
       cursor: pointer;
@@ -521,6 +627,36 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       flex-shrink: 0;
     }
 
+    .branch-badge {
+      background: #141f30;
+      color: #7dd3fc;
+      border: 1px solid #1e3a5f;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-family: monospace;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      flex-shrink: 0;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .worktree-badge {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 9.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
     .issue-badge {
       background: #1e3a5f;
       color: #60a5fa;
@@ -642,7 +778,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
   <div class="search-bar-row">
-    <input type="text" id="searchInput" class="search-input" placeholder="Tìm kiếm nội dung" />
+    <input type="text" id="searchInput" class="search-input" placeholder="Tìm kiếm nội dung, issue, branch..." />
     <button id="refreshBtn" class="icon-tool-btn" title="Làm mới danh sách (Refresh)">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
@@ -654,18 +790,25 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0-.33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
       </svg>
     </button>
-    <button id="updateBtn" class="icon-tool-btn" title="Kiểm tra bản cập nhật mới (GitHub)">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
-      </svg>
+  </div>
+
+  <!-- Thanh chọn Workspace / Dự án -->
+  <div class="workspace-bar" id="workspaceBar" style="display: none;">
+    <button class="ws-pill active" id="wsBtnCurrent">
+      <span class="ws-dot"></span>
+      <span id="wsCurrentName">app-backend</span>
+    </button>
+    <button class="ws-pill" id="wsBtnAll">
+      <span id="wsAllText">🌐 Tất cả dự án</span>
     </button>
   </div>
 
-  <!-- 3 Tab Lọc: Hôm nay, Đang chạy, Cần review -->
+  <!-- 4 Tab Lọc: Hôm nay, Đang chạy, Cần review, Tất cả -->
   <div class="filter-tabs">
-    <button class="filter-btn active" data-filter="today">Hôm nay</button>
-    <button class="filter-btn" data-filter="active">Đang chạy</button>
-    <button class="filter-btn" data-filter="review" id="reviewFilterBtn">Cần review</button>
+    <button class="filter-btn active" data-filter="today" id="tabTodayBtn">Hôm nay</button>
+    <button class="filter-btn" data-filter="active" id="tabActiveBtn">Đang chạy</button>
+    <button class="filter-btn" data-filter="review" id="tabReviewBtn">Cần review</button>
+    <button class="filter-btn" data-filter="all" id="tabAllBtn">Tất cả</button>
   </div>
 
   <div id="contentContainer">
@@ -680,20 +823,109 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     const contentContainer = document.getElementById('contentContainer');
     const refreshBtn = document.getElementById('refreshBtn');
     const settingsBtn = document.getElementById('settingsBtn');
-    const updateBtn = document.getElementById('updateBtn');
     const filterBtns = document.querySelectorAll('.filter-btn');
+    const workspaceBar = document.getElementById('workspaceBar');
+    const wsBtnCurrent = document.getElementById('wsBtnCurrent');
+    const wsBtnAll = document.getElementById('wsBtnAll');
+    const wsCurrentName = document.getElementById('wsCurrentName');
+    const wsAllText = document.getElementById('wsAllText');
 
     // 2. Khôi phục State an toàn
     const savedState = vscode.getState() || {};
     let allSessions = Array.isArray(savedState.sessions) ? savedState.sessions : [];
     let reviewedIds = new Set(Array.isArray(savedState.reviewedIds) ? savedState.reviewedIds : []);
     let currentFilter = savedState.currentFilter || 'today';
+    let currentWorkspace = savedState.currentWorkspace || null;
+    let wsMode = savedState.wsMode || 'current';
+    let currentLang = savedState.lang || 'vi';
     let sectionState = savedState.sectionState || {
       need_accept: true,
       running: true,
       need_review: true,
       done: true
     };
+
+    // Dictionary i18n
+    const I18N = {
+      vi: {
+        searchPlaceholder: "Tìm kiếm nội dung, issue, branch...",
+        refreshTitle: "Làm mới danh sách (Refresh)",
+        settingsTitle: "Cài đặt cấu hình (Settings)",
+        tabToday: "Hôm nay",
+        tabActive: "Đang chạy",
+        tabReview: "Cần review",
+        tabAll: "Tất cả",
+        wsAll: "🌐 Tất cả dự án",
+        secNeedAccept: "CHỜ DUYỆT",
+        secRunning: "ĐANG CHẠY",
+        secNeedReview: "VỪA XONG (CẦN REVIEW)",
+        secDone: "ĐÃ HOÀN THÀNH",
+        btnDiff: "Xem diff",
+        btnApprove: "Duyệt & Chạy",
+        btnReview: "Xem kết quả",
+        btnMarkReviewed: "✓ Đã xem",
+        btnDeleteTitle: "Xoá phiên hội thoại",
+        noSessionsReviewTitle: "Không có task nào cần review",
+        noSessionsReviewDesc: "Các task Claude vừa làm xong sẽ xuất hiện tại đây để bạn kiểm tra.",
+        noSessionsActive: "Hiện không có task nào đang chạy hoặc chờ duyệt.",
+        noSessionsFound: "Không tìm thấy phiên làm việc nào phù hợp.",
+        loading: "Đang tải danh sách sessions..."
+      },
+      en: {
+        searchPlaceholder: "Search content, issue, branch...",
+        refreshTitle: "Refresh session list",
+        settingsTitle: "Open Settings",
+        tabToday: "Today",
+        tabActive: "Running",
+        tabReview: "Need Review",
+        tabAll: "All",
+        wsAll: "🌐 All Projects",
+        secNeedAccept: "WAITING APPROVAL",
+        secRunning: "RUNNING",
+        secNeedReview: "FINISHED (NEED REVIEW)",
+        secDone: "COMPLETED",
+        btnDiff: "View Diff",
+        btnApprove: "Approve & Run",
+        btnReview: "Review Result",
+        btnMarkReviewed: "✓ Reviewed",
+        btnDeleteTitle: "Delete conversation session",
+        noSessionsReviewTitle: "No sessions need review",
+        noSessionsReviewDesc: "Sessions completed by Claude will appear here for your review.",
+        noSessionsActive: "No tasks are currently running or waiting for approval.",
+        noSessionsFound: "No matching sessions found.",
+        loading: "Loading sessions..."
+      }
+    };
+
+    function t(key) {
+      const dict = I18N[currentLang] || I18N['vi'];
+      return dict[key] || key;
+    }
+
+    function saveState() {
+      vscode.setState({
+        sessions: allSessions,
+        reviewedIds: Array.from(reviewedIds),
+        currentFilter,
+        currentWorkspace,
+        wsMode,
+        lang: currentLang,
+        sectionState
+      });
+    }
+
+    function updateLanguageUI() {
+      if (searchInput) searchInput.placeholder = t('searchPlaceholder');
+      if (refreshBtn) refreshBtn.title = t('refreshTitle');
+      if (settingsBtn) settingsBtn.title = t('settingsTitle');
+      const tabToday = document.getElementById('tabTodayBtn');
+      if (tabToday) tabToday.textContent = t('tabToday');
+      const tabActive = document.getElementById('tabActiveBtn');
+      if (tabActive) tabActive.textContent = t('tabActive');
+      const tabAll = document.getElementById('tabAllBtn');
+      if (tabAll) tabAll.textContent = t('tabAll');
+      if (wsAllText) wsAllText.textContent = t('wsAll');
+    }
 
     // 3. Khôi phục tab lọc đang chọn
     filterBtns.forEach(btn => {
@@ -730,18 +962,14 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     function markSessionReviewed(id) {
       if (!id) return;
       reviewedIds.add(id);
-      const state = vscode.getState() || {};
-      state.reviewedIds = Array.from(reviewedIds);
-      vscode.setState(state);
+      saveState();
       vscode.postMessage({ type: 'markReviewed', id });
       renderSessions();
     }
 
     function toggleSection(key) {
       sectionState[key] = !sectionState[key];
-      const currentState = vscode.getState() || {};
-      currentState.sectionState = sectionState;
-      vscode.setState(currentState);
+      saveState();
       renderSessions();
     }
 
@@ -752,17 +980,25 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       let actionButtons = '';
       if (s.status === 'need_accept') {
         actionButtons = '<div class="card-actions">' +
-          '<button class="btn btn-secondary" data-action="diff" data-id="' + s.id + '">Xem diff</button>' +
-          '<button class="btn" data-action="approve" data-id="' + s.id + '">Duyệt & Chạy</button>' +
+          '<button class="btn btn-secondary" data-action="diff" data-id="' + s.id + '">' + t('btnDiff') + '</button>' +
+          '<button class="btn" data-action="approve" data-id="' + s.id + '">' + t('btnApprove') + '</button>' +
           '</div>';
       } else if (s.isNeedReview) {
         actionButtons = '<div class="card-actions">' +
-          '<button class="btn btn-review" data-action="review-open" data-id="' + s.id + '">Xem kết quả</button>' +
-          '<button class="btn btn-secondary" data-action="mark-reviewed" data-id="' + s.id + '" title="Đánh dấu đã xem mà không cần mở">✓ Đã xem</button>' +
+          '<button class="btn btn-review" data-action="review-open" data-id="' + s.id + '">' + t('btnReview') + '</button>' +
+          '<button class="btn btn-secondary" data-action="mark-reviewed" data-id="' + s.id + '" title="' + t('btnMarkReviewed') + '">' + t('btnMarkReviewed') + '</button>' +
           '</div>';
       }
 
-      const reviewBadge = s.isNeedReview ? '<span class="review-badge">Cần review</span>' : '';
+      const reviewBadge = s.isNeedReview ? '<span class="review-badge">' + t('tabReview') + '</span>' : '';
+      
+      const branchBadge = s.branch ? 
+        '<span class="branch-badge" title="Git Branch: ' + escapeHtml(s.branch) + '">' +
+          '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>' +
+          escapeHtml(s.branch) +
+        '</span>' : '';
+
+      const worktreeBadge = s.isWorktree ? '<span class="worktree-badge" title="Git Worktree directory">worktree</span>' : '';
 
       const footerMetaRow = '<div class="footer-meta-row">' +
         '<span class="footer-meta-item">' + escapeHtml(s.statusMessage) + '</span>' +
@@ -784,10 +1020,12 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           '<div style="flex: 1; min-width: 0;">' +
             '<div class="meta-row">' +
               '<span class="repo-badge">' + escapeHtml(s.repo) + '</span>' +
+              branchBadge +
+              worktreeBadge +
               (s.issueId ? '<span class="issue-badge">' + escapeHtml(s.issueId) + '</span>' : '') +
               reviewBadge +
               '<span class="title-text" title="' + escapeHtml(s.title) + '">' + escapeHtml(s.title) + '</span>' +
-              '<button class="card-delete-btn" title="Xoá phiên hội thoại" data-action="delete" data-id="' + s.id + '" data-title="' + escapeHtml(s.title) + '" data-path="' + encodeURIComponent(s.filePath || '') + '">' +
+              '<button class="card-delete-btn" title="' + t('btnDeleteTitle') + '" data-action="delete" data-id="' + s.id + '" data-title="' + escapeHtml(s.title) + '" data-path="' + encodeURIComponent(s.filePath || '') + '">' +
                 '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                   '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
                 '</svg>' +
@@ -803,9 +1041,25 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
 
     function renderSessions() {
       try {
+        updateLanguageUI();
         const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
+
+        // Update workspace bar UI
+        if (currentWorkspace && currentWorkspace.name) {
+          if (workspaceBar) workspaceBar.style.display = 'flex';
+          if (wsCurrentName) wsCurrentName.textContent = currentWorkspace.name;
+          if (wsMode === 'current') {
+            wsBtnCurrent?.classList.add('active');
+            wsBtnAll?.classList.remove('active');
+          } else {
+            wsBtnAll?.classList.add('active');
+            wsBtnCurrent?.classList.remove('active');
+          }
+        } else {
+          if (workspaceBar) workspaceBar.style.display = 'none';
+        }
 
         // Bổ sung cờ isNeedReview: các task hoàn thành trong ngày hôm nay nhưng người dùng CHƯA bấm xem
         const enrichedSessions = allSessions.map(s => {
@@ -818,35 +1072,48 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
 
         // Cập nhật số lượng đếm trên tab Cần review
         const totalNeedReview = enrichedSessions.filter(s => s.isNeedReview).length;
-        const reviewBtn = document.getElementById('reviewFilterBtn');
+        const reviewBtn = document.getElementById('tabReviewBtn');
         if (reviewBtn) {
-          reviewBtn.textContent = totalNeedReview > 0 ? ('Cần review (' + totalNeedReview + ')') : 'Cần review';
+          reviewBtn.textContent = totalNeedReview > 0 
+            ? (t('tabReview') + ' (' + totalNeedReview + ')') 
+            : t('tabReview');
         }
 
-        const filtered = enrichedSessions.filter(s => {
-          if (query) {
-            const match = (
+        let filtered = enrichedSessions;
+
+        // Lọc theo Workspace (nếu người dùng chọn tab Dự án này và đang mở 1 workspace)
+        if (wsMode === 'current' && currentWorkspace && currentWorkspace.name) {
+          const targetRepo = currentWorkspace.name.toLowerCase();
+          filtered = filtered.filter(s => {
+            if (!s.repo) return true;
+            const sRepo = s.repo.toLowerCase();
+            return sRepo === targetRepo || (s.cwd && s.cwd.toLowerCase().includes(targetRepo));
+          });
+        }
+
+        // Lọc theo Search Query hoặc Tab lọc
+        if (query) {
+          // Khi tìm kiếm: tự động tìm kiếm trên TOÀN BỘ lịch sử sessions (không bị giới hạn bởi tab hôm nay)
+          filtered = filtered.filter(s => {
+            return (
               (s.title && s.title.toLowerCase().includes(query)) ||
               (s.issueId && s.issueId.toLowerCase().includes(query)) ||
               (s.repo && s.repo.toLowerCase().includes(query)) ||
               (s.branch && s.branch.toLowerCase().includes(query)) ||
               (s.lastUserPrompt && s.lastUserPrompt.toLowerCase().includes(query))
             );
-            if (!match) return false;
-          }
-
+          });
+        } else {
+          // Khi không tìm kiếm: áp dụng tab lọc đang chọn
           if (currentFilter === 'today') {
-            return s.updatedAt >= startOfToday.getTime();
+            filtered = filtered.filter(s => s.updatedAt >= startOfToday.getTime());
+          } else if (currentFilter === 'active') {
+            filtered = filtered.filter(s => s.status === 'need_accept' || s.status === 'running' || s.isNeedReview);
+          } else if (currentFilter === 'review') {
+            filtered = filtered.filter(s => s.isNeedReview);
           }
-          if (currentFilter === 'active') {
-            // Đang chạy: gồm Chờ duyệt + Đang chạy + Cả những task vừa xong đang cần review
-            return s.status === 'need_accept' || s.status === 'running' || s.isNeedReview;
-          }
-          if (currentFilter === 'review') {
-            return s.isNeedReview;
-          }
-          return true;
-        });
+          // 'all': giữ nguyên toàn bộ sessions
+        }
 
         const needAcceptList = filtered.filter(s => s.status === 'need_accept');
         const runningList = filtered.filter(s => s.status === 'running');
@@ -861,7 +1128,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
             '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
               '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
             '</span>' +
-            '<span style="color: #f59e0b; font-weight: 700;">CHỜ DUYỆT</span>' +
+            '<span style="color: #f59e0b; font-weight: 700;">' + t('secNeedAccept') + '</span>' +
             '<span class="count-badge">' + needAcceptList.length + '</span>' +
           '</div>' +
           '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
@@ -875,7 +1142,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
             '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
               '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
             '</span>' +
-            '<span style="color: #3b82f6; font-weight: 700;">ĐANG CHẠY</span>' +
+            '<span style="color: #3b82f6; font-weight: 700;">' + t('secRunning') + '</span>' +
             '<span class="count-badge">' + runningList.length + '</span>' +
           '</div>' +
           '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
@@ -889,7 +1156,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
             '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
               '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
             '</span>' +
-            '<span style="color: #c084fc; font-weight: 700;">VỪA XONG (CẦN REVIEW)</span>' +
+            '<span style="color: #c084fc; font-weight: 700;">' + t('secNeedReview') + '</span>' +
             '<span class="count-badge" style="background: rgba(168, 85, 247, 0.25); color: #e9d5ff;">' + needReviewList.length + '</span>' +
           '</div>' +
           '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
@@ -903,7 +1170,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
             '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
               '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
             '</span>' +
-            '<span style="color: #10b981; font-weight: 700;">ĐÃ HOÀN THÀNH</span>' +
+            '<span style="color: #10b981; font-weight: 700;">' + t('secDone') + '</span>' +
             '<span class="count-badge">' + doneList.length + '</span>' +
           '</div>' +
           '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
@@ -915,13 +1182,13 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           if (currentFilter === 'review') {
             html = '<div style="text-align: center; color: #64748b; padding: 32px 16px;">' +
               '<div style="font-size: 24px; margin-bottom: 8px;">🎉</div>' +
-              '<div style="font-weight: 600; color: #94a3b8;">Không có task nào cần review</div>' +
-              '<div style="font-size: 11.5px; opacity: 0.7; margin-top: 4px;">Các task Claude vừa làm xong sẽ xuất hiện tại đây để bạn kiểm tra.</div>' +
+              '<div style="font-weight: 600; color: #94a3b8;">' + t('noSessionsReviewTitle') + '</div>' +
+              '<div style="font-size: 11.5px; opacity: 0.7; margin-top: 4px;">' + t('noSessionsReviewDesc') + '</div>' +
               '</div>';
           } else if (currentFilter === 'active') {
-            html = '<div style="text-align: center; color: #64748b; padding: 24px;">Hiện không có task nào đang chạy hoặc chờ duyệt.</div>';
+            html = '<div style="text-align: center; color: #64748b; padding: 24px;">' + t('noSessionsActive') + '</div>';
           } else {
-            html = '<div style="text-align: center; color: #64748b; padding: 24px;">Không tìm thấy phiên làm việc nào phù hợp.</div>';
+            html = '<div style="text-align: center; color: #64748b; padding: 24px;">' + t('noSessionsFound') + '</div>';
           }
         }
 
@@ -957,9 +1224,19 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       });
     }
 
-    if (updateBtn) {
-      updateBtn.addEventListener('click', () => {
-        vscode.postMessage({ type: 'checkForUpdates' });
+    if (wsBtnCurrent) {
+      wsBtnCurrent.addEventListener('click', () => {
+        wsMode = 'current';
+        saveState();
+        renderSessions();
+      });
+    }
+
+    if (wsBtnAll) {
+      wsBtnAll.addEventListener('click', () => {
+        wsMode = 'all';
+        saveState();
+        renderSessions();
       });
     }
 
@@ -968,9 +1245,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         filterBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentFilter = btn.getAttribute('data-filter');
-        const state = vscode.getState() || {};
-        state.currentFilter = currentFilter;
-        vscode.setState(state);
+        saveState();
         renderSessions();
       });
     });
@@ -1045,10 +1320,13 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         if (Array.isArray(message.reviewedIds)) {
           message.reviewedIds.forEach(id => reviewedIds.add(id));
         }
-        const state = vscode.getState() || {};
-        state.sessions = allSessions;
-        state.reviewedIds = Array.from(reviewedIds);
-        vscode.setState(state);
+        if (message.currentWorkspace !== undefined) {
+          currentWorkspace = message.currentWorkspace;
+        }
+        if (message.lang) {
+          currentLang = message.lang;
+        }
+        saveState();
         renderSessions();
       }
     });

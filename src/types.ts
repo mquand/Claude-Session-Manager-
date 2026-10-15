@@ -6,6 +6,7 @@ export interface ClaudeSession {
   title: string;             // Tiêu đề
   repo: string;              // Ví dụ: "app-backend", "lima"
   branch: string;            // Ví dụ: "develop", "master"
+  isWorktree?: boolean;      // Đang chạy trên Git Worktree
   status: SessionStatus;
   statusMessage: string;     // Ví dụ: "3 phút trước", "3 ngày trước"
   lastUserPrompt?: string;   // Ví dụ: "> làm đi, mục tiêu..."

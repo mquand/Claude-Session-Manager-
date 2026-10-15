@@ -138,7 +138,7 @@ class SessionScanner {
             }
         }
         const sortedCandidates = Array.from(currentFiles.values()).sort((a, b) => b.mtimeMs - a.mtimeMs);
-        const topCandidates = sortedCandidates.slice(0, 30);
+        const topCandidates = sortedCandidates.slice(0, 50);
         const sessions = [];
         for (const item of topCandidates) {
             const activeInfo = activeMap.get(item.sessionId);
@@ -227,6 +227,7 @@ class SessionScanner {
             let inputTokens = 0;
             let outputTokens = 0;
             let turnCount = 0;
+            let isWorktree = false;
             const fileStream = fs.createReadStream(filePath, { encoding: 'utf8', highWaterMark: 64 * 1024 });
             const rl = readline.createInterface({
                 input: fileStream,
@@ -240,7 +241,7 @@ class SessionScanner {
                     if (!title && item.type === 'ai-title' && item.aiTitle) {
                         title = item.aiTitle;
                     }
-                    if (!branch && item.gitBranch && item.gitBranch !== 'HEAD') {
+                    if (item.gitBranch && item.gitBranch !== 'HEAD') {
                         branch = item.gitBranch;
                     }
                     if (item.entrypoint) {
@@ -248,11 +249,31 @@ class SessionScanner {
                     }
                     if (item.cwd) {
                         const base = path.basename(item.cwd);
-                        if (base && base !== 'workspace') {
-                            repo = base;
+                        // Hỗ trợ Git Worktree: Trong worktree, .git là 1 file chứa "gitdir: .../<main-repo>/.git/worktrees/..."
+                        try {
+                            const gitPath = path.join(item.cwd, '.git');
+                            if (fs.existsSync(gitPath) && fs.statSync(gitPath).isFile()) {
+                                isWorktree = true;
+                                const gitContent = fs.readFileSync(gitPath, 'utf8');
+                                const match = gitContent.match(/gitdir:\s*(.*)/i);
+                                if (match) {
+                                    const gitDir = match[1].trim();
+                                    const parts = gitDir.split(path.sep);
+                                    const gitIdx = parts.indexOf('.git');
+                                    if (gitIdx > 0) {
+                                        repo = parts[gitIdx - 1];
+                                    }
+                                }
+                            }
                         }
-                        else if (!repo && base) {
-                            repo = base;
+                        catch { }
+                        if (!repo) {
+                            if (base && base !== 'workspace') {
+                                repo = base;
+                            }
+                            else if (!repo && base) {
+                                repo = base;
+                            }
                         }
                     }
                     if (item.type === 'cost-state') {
@@ -404,6 +425,7 @@ class SessionScanner {
                 title,
                 repo,
                 branch: branch || 'develop',
+                isWorktree,
                 status,
                 statusMessage,
                 lastUserPrompt,

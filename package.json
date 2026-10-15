@@ -2,7 +2,7 @@
   "name": "claude-session-manager",
   "displayName": "Claude Session & Issue Manager",
   "description": "Quản lý các issue, session, và trạng thái hội thoại của Claude trực tiếp trên VS Code",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "publisher": "mquand",
   "author": "mquand",
   "license": "MIT",
@@ -69,6 +69,16 @@
           "type": "number",
           "default": 10,
           "description": "Thời gian tự động quét lại (giây)"
+        },
+        "claudeSessionManager.language": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "vi",
+            "en"
+          ],
+          "default": "auto",
+          "description": "Ngôn ngữ hiển thị giao diện (Interface language: auto / vi / en)"
         }
       }
     }
