@@ -4,6 +4,11 @@
   "description": "Quản lý các issue, session, và trạng thái hội thoại của Claude trực tiếp trên VS Code",
   "version": "0.1.0",
   "publisher": "antigravity",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mquand/claude-session-manager.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
