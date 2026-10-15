@@ -2,7 +2,7 @@
   "name": "claude-session-manager",
   "displayName": "Claude Session & Issue Manager",
   "description": "Manage Claude Code and Claude CLI sessions, issues, token metrics, and git worktrees directly in VS Code / Quản lý phiên làm việc Claude trực tiếp trên VS Code",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "publisher": "mhquan",
   "author": "mhquan",
   "license": "MIT",

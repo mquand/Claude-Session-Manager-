@@ -617,7 +617,6 @@ class IssuesViewProvider {
     .workspace-bar {
       display: flex;
       align-items: center;
-      justify-content: space-between;
       gap: 6px;
       margin-bottom: 8px;
       padding: 1px 0;
@@ -629,6 +628,41 @@ class IssuesViewProvider {
       gap: 5px;
       overflow-x: auto;
       min-width: 0;
+    }
+
+    .sub-filter-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 8px;
+      padding: 0 1px;
+      min-height: 24px;
+    }
+
+    .worktree-filter-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex-shrink: 1;
+    }
+
+    .worktree-filter-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    #wsWorktreeLabel {
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: inline-block;
+      vertical-align: middle;
     }
 
     .ws-tokens-badge {
@@ -736,22 +770,6 @@ class IssuesViewProvider {
     body.vscode-light .ws-worktree-clear:hover {
       background: #ef4444;
       color: #ffffff;
-    }
-
-    .worktree-filter-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: -2px;
-      margin-bottom: 8px;
-      padding: 0 1px;
-    }
-
-    .worktree-filter-label {
-      font-size: 11px;
-      color: var(--text-muted);
-      font-weight: 500;
-      user-select: none;
     }
 
     .ws-dot {
@@ -1163,6 +1181,20 @@ class IssuesViewProvider {
   </style>
 </head>
 <body>
+  <!-- Row 1 (Top): Phạm vi dự án (Chỉ gồm Tất cả dự án & Workspace) -->
+  <div class="workspace-bar" id="workspaceBar">
+    <div class="ws-pills-wrap">
+      <button class="ws-pill" id="wsBtnAll">
+        <span id="wsAllText">Tất cả dự án</span>
+      </button>
+      <button class="ws-pill active" id="wsBtnCurrent" style="display: none;">
+        <span class="ws-dot"></span>
+        <span id="wsCurrentName"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Row 2: Thanh tìm kiếm + Nút Refresh + Nút Cài đặt -->
   <div class="search-bar-row">
     <input type="text" id="searchInput" class="search-input" placeholder="Tìm kiếm nội dung, issue, branch..." />
     <button id="refreshBtn" class="icon-tool-btn" title="Làm mới danh sách (Refresh)">
@@ -1178,36 +1210,25 @@ class IssuesViewProvider {
     </button>
   </div>
 
-  <!-- Row 1: Thanh chọn Workspace / Dự án & Thống kê Token hôm nay -->
-  <div class="workspace-bar" id="workspaceBar">
-    <div class="ws-pills-wrap">
-      <button class="ws-pill" id="wsBtnAll">
-        <span id="wsAllText">Tất cả dự án</span>
-      </button>
-      <button class="ws-pill active" id="wsBtnCurrent" style="display: none;">
-        <span class="ws-dot"></span>
-        <span id="wsCurrentName"></span>
+  <!-- Row 3: Bộ lọc Git Worktree & Thống kê Token hôm nay (cùng một dòng) -->
+  <div class="sub-filter-row" id="subFilterRow">
+    <div class="worktree-filter-wrap" id="worktreeFilterRow" style="display: none;">
+      <span class="worktree-filter-label" id="worktreeFilterLabel">Worktree:</span>
+      <button class="ws-pill ws-pill-worktree" id="wsBtnWorktree" title="Lọc theo Git Worktree (Click để chọn trong Popup)">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="6" y1="3" x2="6" y2="15"></line>
+          <circle cx="18" cy="6" r="3"></circle>
+          <circle cx="18" cy="6" r="3"></circle>
+          <path d="M18 9a9 9 0 0 1-9 9"></path>
+        </svg>
+        <span id="wsWorktreeLabel">Tất cả ▾</span>
+        <span id="wsWorktreeClear" class="ws-worktree-clear" style="display: none;" title="Bỏ lọc worktree">✕</span>
       </button>
     </div>
     <div class="ws-tokens-badge" id="wsTokensBadge" title="Tổng số token Claude đã dùng hôm nay">
       <span class="ws-tokens-label">tokens:</span>
       <span class="ws-tokens-num" id="wsTokensNum">0</span>
     </div>
-  </div>
-
-  <!-- Row 2: Bộ lọc Git Worktree (Tách dòng riêng, không emoji, tinh gọn chuẩn VS Code) -->
-  <div class="worktree-filter-row" id="worktreeFilterRow" style="display: none;">
-    <span class="worktree-filter-label" id="worktreeFilterLabel">Worktree:</span>
-    <button class="ws-pill ws-pill-worktree" id="wsBtnWorktree" title="Lọc theo Git Worktree (Click để chọn trong Popup)">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="6" y1="3" x2="6" y2="15"></line>
-        <circle cx="18" cy="6" r="3"></circle>
-        <circle cx="18" cy="6" r="3"></circle>
-        <path d="M18 9a9 9 0 0 1-9 9"></path>
-      </svg>
-      <span id="wsWorktreeLabel">Tất cả ▾</span>
-      <span id="wsWorktreeClear" class="ws-worktree-clear" style="display: none;" title="Bỏ lọc worktree">✕</span>
-    </button>
   </div>
 
   <!-- 3 Tab Lọc: Tất cả > Hôm nay > Đang chạy -->
@@ -1488,7 +1509,7 @@ class IssuesViewProvider {
         const hasAnyWorktree = allSessions.some(s => !!s.branch);
         if (worktreeFilterRow) {
           if (hasAnyWorktree) {
-            worktreeFilterRow.style.display = 'flex';
+            worktreeFilterRow.style.display = 'inline-flex';
             if (currentWorktree) {
               wsBtnWorktree?.classList.add('active');
               if (wsWorktreeLabel) wsWorktreeLabel.textContent = currentWorktree;
