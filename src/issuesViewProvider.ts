@@ -823,11 +823,28 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
+      justify-content: space-between;
       gap: 8px;
       font-size: 11.5px;
       color: #7d8b9f;
       margin-top: 10px;
       line-height: 1.4;
+    }
+
+    .footer-left-meta {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .footer-right-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+      flex-shrink: 0;
     }
 
     .footer-meta-item {
@@ -848,7 +865,6 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     .footer-meta-item.short-id {
       color: #556275;
       font-family: monospace;
-      margin-left: auto;
     }
 
     .card-actions {
@@ -900,12 +916,12 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
   <!-- Thanh chọn Workspace / Dự án & Thống kê Token hôm nay -->
   <div class="workspace-bar" id="workspaceBar">
     <div class="ws-pills-wrap">
+      <button class="ws-pill" id="wsBtnAll">
+        <span id="wsAllText">Tất cả dự án</span>
+      </button>
       <button class="ws-pill active" id="wsBtnCurrent" style="display: none;">
         <span class="ws-dot"></span>
         <span id="wsCurrentName"></span>
-      </button>
-      <button class="ws-pill" id="wsBtnAll">
-        <span id="wsAllText">Tất cả dự án</span>
       </button>
     </div>
     <div class="ws-tokens-badge" id="wsTokensBadge" title="Tổng số token Claude đã dùng hôm nay">
@@ -914,11 +930,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     </div>
   </div>
 
-  <!-- 3 Tab Lọc: Đang chạy, Hôm nay, Tất cả -->
+  <!-- 3 Tab Lọc: Tất cả > Hôm nay > Đang chạy -->
   <div class="filter-tabs">
-    <button class="filter-btn active" data-filter="active" id="tabActiveBtn">Đang chạy</button>
-    <button class="filter-btn" data-filter="today" id="tabTodayBtn">Hôm nay</button>
     <button class="filter-btn" data-filter="all" id="tabAllBtn">Tất cả</button>
+    <button class="filter-btn active" data-filter="today" id="tabTodayBtn">Hôm nay</button>
+    <button class="filter-btn" data-filter="active" id="tabActiveBtn">Đang chạy</button>
   </div>
 
   <div id="contentContainer">
@@ -1107,23 +1123,26 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>' +
           'branch: <span class="branch-name">' + escapeHtml(s.branch) + '</span>' +
         '</span>' +
-        (s.isWorktree ? '<span class="worktree-badge">worktree</span>' : '') +
-        '<span style="opacity: 0.35;">•</span>'
+        (s.isWorktree ? '<span class="worktree-badge">worktree</span>' : '')
       ) : '';
 
       const footerMetaRow = '<div class="footer-meta-row">' +
-        branchFooterItem +
-        '<span class="footer-meta-item">' + escapeHtml(s.statusMessage) + '</span>' +
-        '<span style="opacity: 0.35;">•</span>' +
-        '<span class="footer-meta-item">' + escapeHtml(s.modelName) + '</span>' +
-        '<span style="opacity: 0.35;">•</span>' +
-        '<span class="footer-meta-item token">in: ' + escapeHtml(s.inputTokensFormatted) + '</span>' +
-        '<span style="opacity: 0.35;">•</span>' +
-        '<span class="footer-meta-item token">out: ' + escapeHtml(s.outputTokensFormatted) + '</span>' +
-        (s.costUSD ? '<span style="opacity: 0.35;">•</span><span class="footer-meta-item cost">' + escapeHtml(s.costUSD) + '</span>' : '') +
-        '<span style="opacity: 0.35;">•</span>' +
-        '<span class="footer-meta-item" title="Số lượt trao đổi hội thoại">' + (s.turnCount || 0) + ' turns</span>' +
-        '<span class="footer-meta-item short-id">' + escapeHtml(s.shortId) + '</span>' +
+        '<div class="footer-left-meta">' +
+          '<span class="footer-meta-item">' + escapeHtml(s.statusMessage) + '</span>' +
+          '<span style="opacity: 0.35;">•</span>' +
+          '<span class="footer-meta-item">' + escapeHtml(s.modelName) + '</span>' +
+          '<span style="opacity: 0.35;">•</span>' +
+          '<span class="footer-meta-item token">in: ' + escapeHtml(s.inputTokensFormatted) + '</span>' +
+          '<span style="opacity: 0.35;">•</span>' +
+          '<span class="footer-meta-item token">out: ' + escapeHtml(s.outputTokensFormatted) + '</span>' +
+          (s.costUSD ? '<span style="opacity: 0.35;">•</span><span class="footer-meta-item cost">' + escapeHtml(s.costUSD) + '</span>' : '') +
+          '<span style="opacity: 0.35;">•</span>' +
+          '<span class="footer-meta-item" title="Số lượt trao đổi hội thoại">' + (s.turnCount || 0) + ' turns</span>' +
+        '</div>' +
+        '<div class="footer-right-meta">' +
+          branchFooterItem +
+          '<span class="footer-meta-item short-id">' + escapeHtml(s.shortId) + '</span>' +
+        '</div>' +
       '</div>';
 
       return '<div class="session-card ' + cardStatusClass + '" data-action="open" data-id="' + s.id + '">' +
@@ -1141,7 +1160,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
                 '</svg>' +
               '</button>' +
             '</div>' +
-            (s.lastUserPrompt ? '<div class="user-prompt">' + escapeHtml(s.lastUserPrompt) + '</div>' : '') +
+            (s.lastUserPrompt ? '<div class="user-prompt">&gt; ' + escapeHtml(s.lastUserPrompt.replace(/^>\s*/, '')) + '</div>' : '') +
             actionButtons +
             footerMetaRow +
           '</div>' +

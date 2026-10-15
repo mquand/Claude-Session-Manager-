@@ -5,7 +5,8 @@ import * as readline from 'readline';
 import { ClaudeSession, SessionStatus, ScanOptions } from './types';
 
 export class SessionScanner {
-  private static sessionCache = new Map<string, { session: ClaudeSession; mtimeMs: number }>();
+  private static readonly CACHE_VERSION = 3;
+  private static sessionCache = new Map<string, { session: ClaudeSession; mtimeMs: number; cacheVersion?: number }>();
 
   public static deleteSession(sessionId: string, filePath: string): boolean {
     try {
@@ -153,6 +154,7 @@ export class SessionScanner {
 
       if (
         cached &&
+        cached.cacheVersion === this.CACHE_VERSION &&
         cached.mtimeMs === item.mtimeMs &&
         !activeInfo &&
         cached.session.status === 'done' &&
@@ -176,7 +178,7 @@ export class SessionScanner {
 
       const parsed = await this.fastParseSession(item.filePath, item.sessionId, item.mtimeMs, item.dirPath, activeInfo, options);
       if (parsed) {
-        this.sessionCache.set(item.sessionId, { session: parsed, mtimeMs: item.mtimeMs });
+        this.sessionCache.set(item.sessionId, { session: parsed, mtimeMs: item.mtimeMs, cacheVersion: this.CACHE_VERSION });
         sessions.push(parsed);
       }
     }
@@ -199,10 +201,10 @@ export class SessionScanner {
   }
 
   private static formatTokens(tokens: number): string {
-    if (tokens >= 1_000_000_000) return (tokens / 1_000_000_000).toFixed(1) + 'B';
-    if (tokens >= 1_000_000) return (tokens / 1_000_000).toFixed(1) + 'M';
-    if (tokens >= 1_000) return (tokens / 1_000).toFixed(0) + 'K';
-    return tokens.toString();
+    if (tokens >= 1_000_000_000) return (tokens / 1_000_000_000).toFixed(1).replace(/\.0$/, '') + 'B';
+    if (tokens >= 1_000_000) return (tokens / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (tokens >= 1_000) return (tokens / 1_000).toFixed(1).replace(/\.0$/, '') + 'k';
+    return tokens.toLocaleString();
   }
 
   private static formatModelName(rawModel: string): string {
@@ -281,8 +283,11 @@ export class SessionScanner {
       let lastTurnHadToolUse = false;
       let totalCostUSD = 0;
       let modelName = 'Opus 5.5';
-      let inputTokens = 0;
-      let outputTokens = 0;
+      let hasCostState = false;
+      let costStateInputTokens = 0;
+      let costStateOutputTokens = 0;
+      let assistantInputTokens = 0;
+      let assistantOutputTokens = 0;
       let turnCount = 0;
 
       let isWorktree = false;
@@ -339,13 +344,18 @@ export class SessionScanner {
           }
 
           if (item.type === 'cost-state') {
-            if (item.totalCostUSD) totalCostUSD = item.totalCostUSD;
-            if (item.modelUsage) {
+            if (item.totalCostUSD !== undefined) totalCostUSD = item.totalCostUSD;
+            if (item.modelUsage && typeof item.modelUsage === 'object') {
+              hasCostState = true;
+              let sumIn = 0;
+              let sumOut = 0;
               for (const [mName, usage] of Object.entries<any>(item.modelUsage)) {
-                modelName = this.formatModelName(mName);
-                inputTokens = (usage.inputTokens || 0) + (usage.cacheReadInputTokens || 0) + (usage.cacheCreationInputTokens || 0);
-                outputTokens = (usage.outputTokens || 0);
+                if (mName) modelName = this.formatModelName(mName);
+                sumIn += (usage.inputTokens || 0) + (usage.cacheReadInputTokens || 0) + (usage.cacheCreationInputTokens || 0);
+                sumOut += (usage.outputTokens || 0);
               }
+              costStateInputTokens = sumIn;
+              costStateOutputTokens = sumOut;
             }
           }
 
@@ -383,8 +393,8 @@ export class SessionScanner {
             }
             if (item.message.usage) {
               const u = item.message.usage;
-              inputTokens += (u.input_tokens || 0) + (u.cache_read_input_tokens || 0);
-              outputTokens += (u.output_tokens || 0);
+              assistantInputTokens += (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+              assistantOutputTokens += (u.output_tokens || 0);
             }
 
             const content = item.message.content;
@@ -573,6 +583,14 @@ export class SessionScanner {
       // Prompt gần nhất
       const lastUserPrompt = meaningfulLastPrompt ? meaningfulLastPrompt.split('\n')[0] : undefined;
 
+      const inputTokens = (hasCostState && (costStateInputTokens > 0 || costStateOutputTokens > 0))
+        ? costStateInputTokens
+        : assistantInputTokens;
+      const outputTokens = (hasCostState && (costStateInputTokens > 0 || costStateOutputTokens > 0))
+        ? costStateOutputTokens
+        : assistantOutputTokens;
+      const totalTokens = inputTokens + outputTokens;
+
       const source: 'VS Code' | 'Terminal' = entrypoint === 'cli' ? 'Terminal' : 'VS Code';
       const inputTokensFormatted = inputTokens > 0 ? this.formatTokens(inputTokens) : '0';
       const outputTokensFormatted = outputTokens > 0 ? this.formatTokens(outputTokens) : '0';
@@ -611,7 +629,7 @@ export class SessionScanner {
         cwd: lastCwd || undefined,
         rawInputTokens: inputTokens,
         rawOutputTokens: outputTokens,
-        totalTokens: inputTokens + outputTokens
+        totalTokens: totalTokens
       };
     } catch {
       return null;
