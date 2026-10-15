@@ -354,16 +354,16 @@ export class SessionScanner {
       let statusMessage = '';
 
       // TIÊU CHÍ ĐANG CHẠY / CHỜ DUYỆT:
-      // - Chỉ coi là ĐANG CHẠY khi process OS còn sống VÀ trạng thái là 'running'/'busy'
-      // - Coi là CHỜ DUYỆT khi lượt trước đó gọi tool và đang đợi phản hồi
-      // - Khi process OS ở trạng thái 'idle' (đã hoàn thành câu trả lời) -> coi là 'done' (Đã xong)
+      // 1. Khi process OS đang 'running' / 'busy' / 'executing' -> Claude đang thực sự chạy (kể cả đang chạy tool ở auto mode) -> ĐANG CHẠY
+      // 2. Khi process OS KHÔNG running (đang dừng/idle) VÀ lượt cuối gọi tool chưa có kết quả -> Claude đang dừng chờ người dùng phê duyệt -> CHỜ DUYỆT
+      // 3. Khi process OS 'idle' và không có tool nào chờ duyệt -> ĐÃ HOÀN THÀNH
       if (activeInfo) {
-        if (lastTurnHadToolUse) {
-          status = 'need_accept';
-          statusMessage = 'chờ duyệt';
-        } else if (activeInfo.status === 'running' || activeInfo.status === 'busy' || activeInfo.status === 'executing') {
+        if (activeInfo.status === 'running' || activeInfo.status === 'busy' || activeInfo.status === 'executing') {
           status = 'running';
           statusMessage = 'đang chạy';
+        } else if (lastTurnHadToolUse) {
+          status = 'need_accept';
+          statusMessage = 'chờ duyệt';
         } else {
           status = 'done';
           if (diffMinutes < 1) {

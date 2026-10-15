@@ -64,11 +64,16 @@ Located right beside the search input:
 - Clicking delete prompts a native modal confirmation dialog to prevent accidental deletion.
 - Confirmed deletion completely removes the local `.jsonl` transcript and its associated directory.
 
+### 9. Collapsible Section Dropdowns & Smooth Scrolling
+- Click any section header (**NEED ACCEPT**, **RUNNING**, **DONE**) to fold/unfold it, keeping your view organized.
+- Automatically persists your collapsed/expanded preferences across sessions.
+- Smooth native vertical scrolling with custom compact scrollbars.
+
 ---
 
 ## 🚀 Automated GitHub Releases & CI/CD
 This project includes a ready-to-use GitHub Actions workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
-- Pushing to the `main` branch or pushing a git tag (e.g. `v0.1.1`) automatically:
+- Pushing to the `main` branch or pushing a git tag (e.g. `v0.1.2`) automatically:
   1. Reads the version from `package.json`.
   2. Compiles TypeScript and packages the `.vsix` archive.
   3. Publishes an official **GitHub Release** with `claude-session-manager-<version>.vsix` attached for direct public download!
@@ -81,7 +86,7 @@ This project includes a ready-to-use GitHub Actions workflow ([`.github/workflow
 
 Compatible with macOS, Linux, and Windows without requiring Node.js:
 
-1. Download **`claude-session-manager-0.1.1.vsix`** from the latest GitHub Release or repository root.
+1. Download **`claude-session-manager-0.1.2.vsix`** from the latest GitHub Release or repository root.
 2. Open VS Code and press:
    - **macOS**: `Cmd + Shift + P`
    - **Windows / Linux**: `Ctrl + Shift + P`

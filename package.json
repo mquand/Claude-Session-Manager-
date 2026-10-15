@@ -2,7 +2,7 @@
   "name": "claude-session-manager",
   "displayName": "Claude Session & Issue Manager",
   "description": "Quản lý các issue, session, và trạng thái hội thoại của Claude trực tiếp trên VS Code",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "mquand",
   "author": "mquand",
   "license": "MIT",

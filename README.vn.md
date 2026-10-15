@@ -64,11 +64,16 @@ Ngay cạnh thanh tìm kiếm được tích hợp 2 nút thao tác nhanh:
 - Khi bấm xoá, một hộp thoại xác nhận an toàn (`Modal`) sẽ hiện ra để tránh xoá nhầm.
 - Xác nhận xoá sẽ dọn dẹp triệt để tệp `.jsonl` và thư mục dữ liệu cục bộ tương ứng.
 
+### 9. Thu gọn / Mở rộng nhóm (Accordion Dropdown) & Cuộn mượt mà
+- Các nhóm **CHỜ DUYỆT**, **ĐANG CHẠY**, **ĐÃ HOÀN THÀNH** có thể click vào tiêu đề để thu gọn hoặc mở rộng tùy ý, giúp giao diện luôn gọn gàng khi có nhiều task.
+- Tự động ghi nhớ trạng thái đóng/mở của người dùng qua các phiên làm việc.
+- Hỗ trợ cuộn chuột dọc mượt mà (`Smooth Scrolling`) với thanh cuộn được tối ưu thẩm mỹ.
+
 ---
 
 ## 🚀 CI/CD Tự động hóa tạo Release trên GitHub
 Dự án được tích hợp sẵn GitHub Actions Workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
-- Khi push commit lên nhánh `main` hoặc tạo Git Tag (ví dụ: `v0.1.1`), hệ thống sẽ:
+- Khi push commit lên nhánh `main` hoặc tạo Git Tag (ví dụ: `v0.1.2`), hệ thống sẽ:
   1. Tự động kiểm tra phiên bản trong `package.json`.
   2. Biên dịch TypeScript và đóng gói file `.vsix`.
   3. Tự động tạo một bản **GitHub Release** chính thức và đính kèm file `claude-session-manager-<version>.vsix` cho toàn bộ cộng đồng tải về!
@@ -81,7 +86,7 @@ Dự án được tích hợp sẵn GitHub Actions Workflow ([`.github/workflows
 
 Tương thích hoàn toàn với macOS, Linux, và Windows mà không cần cài Node.js hay build code:
 
-1. Tải file **`claude-session-manager-0.1.1.vsix`** từ Release hoặc thư mục gốc repository.
+1. Tải file **`claude-session-manager-0.1.2.vsix`** từ Release hoặc thư mục gốc repository.
 2. Mở VS Code, nhấn tổ hợp phím:
    - **macOS**: `Cmd + Shift + P`
    - **Windows / Linux**: `Ctrl + Shift + P`

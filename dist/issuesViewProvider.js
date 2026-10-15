@@ -165,9 +165,26 @@ class IssuesViewProvider {
       color: var(--vscode-sideBar-foreground, var(--text-main));
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       margin: 0;
-      padding: 8px;
+      padding: 10px 10px 36px 10px;
       font-size: 12.5px;
       box-sizing: border-box;
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.25);
     }
 
     .search-bar-row {
@@ -260,22 +277,59 @@ class IssuesViewProvider {
       font-weight: 600;
     }
 
-    .section-title {
+    .section-header {
       font-weight: 700;
-      font-size: 10.5px;
+      font-size: 11px;
       letter-spacing: 0.5px;
       text-transform: uppercase;
       color: var(--text-muted);
-      margin: 14px 0 6px 0;
+      margin: 14px 0 8px 0;
       display: flex;
       align-items: center;
       gap: 6px;
+      cursor: pointer;
+      user-select: none;
+      padding: 4px 6px;
+      border-radius: 4px;
+      transition: background 0.15s ease;
+    }
+
+    .section-header:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .section-header .chevron {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.18s ease;
+      color: #94a3b8;
+    }
+
+    .section-header .chevron.open {
+      transform: rotate(0deg);
+    }
+
+    .section-header .chevron.closed {
+      transform: rotate(-90deg);
+    }
+
+    .section-content {
+      transition: all 0.2s ease;
+    }
+
+    .section-content.collapsed {
+      display: none;
     }
 
     .count-badge {
       font-size: 10.5px;
-      font-weight: normal;
+      font-weight: 600;
       color: #cbd5e1;
+      background: #232834;
+      padding: 1px 6px;
+      border-radius: 10px;
+      margin-left: auto;
     }
 
     .session-card {
@@ -542,6 +596,20 @@ class IssuesViewProvider {
       });
     });
 
+    let sectionState = (vscode.getState() && vscode.getState().sectionState) || {
+      need_accept: true,
+      running: true,
+      done: true
+    };
+
+    function toggleSection(key) {
+      sectionState[key] = !sectionState[key];
+      const currentState = vscode.getState() || {};
+      currentState.sectionState = sectionState;
+      vscode.setState(currentState);
+      renderSessions();
+    }
+
     function renderSessions() {
       const query = searchInput.value.toLowerCase().trim();
       const startOfToday = new Date();
@@ -576,18 +644,45 @@ class IssuesViewProvider {
       let html = '';
 
       if (needAcceptList.length > 0) {
-        html += '<div class="section-title" style="color: #f59e0b;">CHỜ DUYỆT <span class="count-badge">' + needAcceptList.length + '</span></div>';
+        const isOpen = query ? true : sectionState.need_accept;
+        html += '<div class="section-header" onclick="toggleSection(\'need_accept\')">' +
+          '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
+            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+          '</span>' +
+          '<span style="color: #f59e0b; font-weight: 700;">CHỜ DUYỆT</span>' +
+          '<span class="count-badge">' + needAcceptList.length + '</span>' +
+        '</div>' +
+        '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
         needAcceptList.forEach(s => html += renderCard(s));
+        html += '</div>';
       }
 
       if (runningList.length > 0) {
-        html += '<div class="section-title" style="color: #3b82f6;">ĐANG CHẠY <span class="count-badge">' + runningList.length + '</span></div>';
+        const isOpen = query ? true : sectionState.running;
+        html += '<div class="section-header" onclick="toggleSection(\'running\')">' +
+          '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
+            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+          '</span>' +
+          '<span style="color: #3b82f6; font-weight: 700;">ĐANG CHẠY</span>' +
+          '<span class="count-badge">' + runningList.length + '</span>' +
+        '</div>' +
+        '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
         runningList.forEach(s => html += renderCard(s));
+        html += '</div>';
       }
 
       if (doneList.length > 0) {
-        html += '<div class="section-title" style="color: #10b981;">ĐÃ HOÀN THÀNH <span class="count-badge">' + doneList.length + '</span></div>';
+        const isOpen = query ? true : sectionState.done;
+        html += '<div class="section-header" onclick="toggleSection(\'done\')">' +
+          '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
+            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+          '</span>' +
+          '<span style="color: #10b981; font-weight: 700;">ĐÃ HOÀN THÀNH</span>' +
+          '<span class="count-badge">' + doneList.length + '</span>' +
+        '</div>' +
+        '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
         doneList.forEach(s => html += renderCard(s));
+        html += '</div>';
       }
 
       if (filtered.length === 0) {
