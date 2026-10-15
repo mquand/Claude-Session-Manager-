@@ -46,7 +46,7 @@ class SessionScanner {
             try {
                 const subEntries = fs.readdirSync(d, { withFileTypes: true });
                 for (const entry of subEntries) {
-                    if (entry.isDirectory()) {
+                    if (entry.isDirectory() && !entry.name.toLowerCase().includes('observer')) {
                         resultDirs.push(path.join(d, entry.name));
                     }
                 }
@@ -104,11 +104,13 @@ class SessionScanner {
             for (const pDir of projectDirs) {
                 if (!pDir.isDirectory())
                     continue;
+                if (pDir.name.toLowerCase().includes('observer'))
+                    continue;
                 const projectPath = path.join(defaultClaudeProjects, pDir.name);
                 try {
                     const files = fs.readdirSync(projectPath, { withFileTypes: true });
                     for (const file of files) {
-                        if (file.isFile() && file.name.endsWith('.jsonl')) {
+                        if (file.isFile() && file.name.endsWith('.jsonl') && !file.name.toLowerCase().includes('observer')) {
                             const fullPath = path.join(projectPath, file.name);
                             const sessionId = file.name.replace('.jsonl', '');
                             const stat = fs.statSync(fullPath);
@@ -127,9 +129,11 @@ class SessionScanner {
         catch (err) {
             console.error('Lỗi duyệt projects:', err);
         }
-        // Xoá session đã bị xoá
-        for (const [cachedId] of this.sessionCache) {
-            if (!currentFiles.has(cachedId)) {
+        // Xoá session đã bị xoá hoặc là observer session rác
+        for (const [cachedId, cachedItem] of this.sessionCache) {
+            if (!currentFiles.has(cachedId) ||
+                (cachedItem.session.repo && cachedItem.session.repo.toLowerCase().includes('observer')) ||
+                (cachedItem.session.modelName && cachedItem.session.modelName.toLowerCase().includes('synthetic'))) {
                 this.sessionCache.delete(cachedId);
             }
         }
@@ -388,6 +392,12 @@ class SessionScanner {
             const outputTokensFormatted = outputTokens > 0 ? this.formatTokens(outputTokens) : '0';
             const costUSD = totalCostUSD > 0 ? `$${totalCostUSD.toFixed(2)}` : undefined;
             const shortId = sessionId.slice(0, 8);
+            if (repo.toLowerCase().includes('observer') ||
+                modelName.toLowerCase().includes('synthetic') ||
+                (title && title.toLowerCase().includes('condense the tool payload')) ||
+                (meaningfulFirstPrompt && meaningfulFirstPrompt.toLowerCase().includes('condense the tool payload'))) {
+                return null;
+            }
             return {
                 id: sessionId,
                 issueId,

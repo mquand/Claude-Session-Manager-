@@ -40,7 +40,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible) {
         if (this._lastSessions.length > 0) {
-          this._view?.webview.postMessage({ type: 'updateSessions', sessions: this._lastSessions });
+          this._view?.webview.postMessage({
+            type: 'updateSessions',
+            sessions: this._lastSessions,
+            reviewedIds: this.getReviewedIds()
+          });
         }
         this.refresh();
       }
@@ -50,13 +54,21 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       switch (data.type) {
         case 'ready': {
           if (this._lastSessions.length > 0) {
-            this._view?.webview.postMessage({ type: 'updateSessions', sessions: this._lastSessions });
+            this._view?.webview.postMessage({
+              type: 'updateSessions',
+              sessions: this._lastSessions,
+              reviewedIds: this.getReviewedIds()
+            });
           }
           await this.refresh();
           break;
         }
         case 'refresh': {
           await this.refresh();
+          break;
+        }
+        case 'markReviewed': {
+          await this.addReviewedId(data.id);
           break;
         }
         case 'openSettings': {
@@ -70,6 +82,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           break;
         }
         case 'openSession': {
+          await this.addReviewedId(data.id);
           try {
             await vscode.commands.executeCommand('claude-vscode.primaryEditor.open', data.id);
           } catch {
@@ -151,6 +164,19 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }, intervalSec * 1000);
   }
 
+  private getReviewedIds(): string[] {
+    return this._context?.globalState.get<string[]>('reviewedSessionIds') || [];
+  }
+
+  private async addReviewedId(id: string) {
+    if (!id || !this._context) return;
+    const reviewed = this.getReviewedIds();
+    if (!reviewed.includes(id)) {
+      reviewed.push(id);
+      await this._context.globalState.update('reviewedSessionIds', reviewed);
+    }
+  }
+
   public async refresh() {
     const config = vscode.workspace.getConfiguration('claudeSessionManager');
     const customPath = config.get<string>('storagePath');
@@ -166,7 +192,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       } else {
         this._view.badge = undefined;
       }
-      this._view.webview.postMessage({ type: 'updateSessions', sessions });
+      this._view.webview.postMessage({
+        type: 'updateSessions',
+        sessions,
+        reviewedIds: this.getReviewedIds()
+      });
     }
 
     if (needAcceptCount > 0) {
@@ -202,6 +232,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       --need-accept: #f59e0b;
       --done: #10b981;
       --running: #3b82f6;
+      --need-review: #a855f7;
     }
 
     body {
@@ -396,6 +427,10 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       border-left-color: var(--done);
     }
 
+    .session-card.status-need_review {
+      border-left-color: var(--need-review);
+    }
+
     .session-card.status-running {
       border-left-color: var(--running);
     }
@@ -426,6 +461,38 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
 
     .dot-done {
       background-color: var(--done);
+    }
+
+    .dot-need_review {
+      background-color: var(--need-review);
+    }
+
+    .review-badge {
+      background: rgba(168, 85, 247, 0.2);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.35);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-left: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .btn-review {
+      background: #7c3aed;
+      color: #ffffff;
+      border: none;
+      border-radius: 3px;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-review:hover {
+      background: #6d28d9;
     }
 
     .dot-running {
@@ -594,11 +661,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     </button>
   </div>
 
-  <!-- 3 Tab Lọc: Hôm nay, Đang hoạt động, Tất cả -->
+  <!-- 3 Tab Lọc: Hôm nay, Đang chạy, Cần review -->
   <div class="filter-tabs">
     <button class="filter-btn active" data-filter="today">Hôm nay</button>
-    <button class="filter-btn" data-filter="active">Đang hoạt động</button>
-    <button class="filter-btn" data-filter="all">Tất cả</button>
+    <button class="filter-btn" data-filter="active">Đang chạy</button>
+    <button class="filter-btn" data-filter="review" id="reviewFilterBtn">Cần review</button>
   </div>
 
   <div id="contentContainer">
@@ -619,10 +686,12 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     // 2. Khôi phục State an toàn
     const savedState = vscode.getState() || {};
     let allSessions = Array.isArray(savedState.sessions) ? savedState.sessions : [];
+    let reviewedIds = new Set(Array.isArray(savedState.reviewedIds) ? savedState.reviewedIds : []);
     let currentFilter = savedState.currentFilter || 'today';
     let sectionState = savedState.sectionState || {
       need_accept: true,
       running: true,
+      need_review: true,
       done: true
     };
 
@@ -658,6 +727,16 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       vscode.postMessage({ type: 'deleteSession', id, title, filePath });
     }
 
+    function markSessionReviewed(id) {
+      if (!id) return;
+      reviewedIds.add(id);
+      const state = vscode.getState() || {};
+      state.reviewedIds = Array.from(reviewedIds);
+      vscode.setState(state);
+      vscode.postMessage({ type: 'markReviewed', id });
+      renderSessions();
+    }
+
     function toggleSection(key) {
       sectionState[key] = !sectionState[key];
       const currentState = vscode.getState() || {};
@@ -667,14 +746,23 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     function renderCard(s) {
-      const dotClass = 'dot-' + s.status;
-      const cardStatusClass = 'status-' + s.status;
-      const needAcceptAction = s.status === 'need_accept' 
-        ? '<div class="card-actions">' +
+      const dotClass = 'dot-' + (s.isNeedReview ? 'need_review' : s.status);
+      const cardStatusClass = 'status-' + (s.isNeedReview ? 'need_review' : s.status);
+      
+      let actionButtons = '';
+      if (s.status === 'need_accept') {
+        actionButtons = '<div class="card-actions">' +
           '<button class="btn btn-secondary" data-action="diff" data-id="' + s.id + '">Xem diff</button>' +
           '<button class="btn" data-action="approve" data-id="' + s.id + '">Duyệt & Chạy</button>' +
-          '</div>'
-        : '';
+          '</div>';
+      } else if (s.isNeedReview) {
+        actionButtons = '<div class="card-actions">' +
+          '<button class="btn btn-review" data-action="review-open" data-id="' + s.id + '">Xem kết quả</button>' +
+          '<button class="btn btn-secondary" data-action="mark-reviewed" data-id="' + s.id + '" title="Đánh dấu đã xem mà không cần mở">✓ Đã xem</button>' +
+          '</div>';
+      }
+
+      const reviewBadge = s.isNeedReview ? '<span class="review-badge">Cần review</span>' : '';
 
       const footerMetaRow = '<div class="footer-meta-row">' +
         '<span class="footer-meta-item">' + escapeHtml(s.statusMessage) + '</span>' +
@@ -697,6 +785,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
             '<div class="meta-row">' +
               '<span class="repo-badge">' + escapeHtml(s.repo) + '</span>' +
               (s.issueId ? '<span class="issue-badge">' + escapeHtml(s.issueId) + '</span>' : '') +
+              reviewBadge +
               '<span class="title-text" title="' + escapeHtml(s.title) + '">' + escapeHtml(s.title) + '</span>' +
               '<button class="card-delete-btn" title="Xoá phiên hội thoại" data-action="delete" data-id="' + s.id + '" data-title="' + escapeHtml(s.title) + '" data-path="' + encodeURIComponent(s.filePath || '') + '">' +
                 '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
@@ -705,7 +794,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
               '</button>' +
             '</div>' +
             (s.lastUserPrompt ? '<div class="user-prompt">' + escapeHtml(s.lastUserPrompt) + '</div>' : '') +
-            needAcceptAction +
+            actionButtons +
             footerMetaRow +
           '</div>' +
         '</div>' +
@@ -718,15 +807,30 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
 
-        const filtered = allSessions.filter(s => {
+        // Bổ sung cờ isNeedReview: các task hoàn thành trong ngày hôm nay nhưng người dùng CHƯA bấm xem
+        const enrichedSessions = allSessions.map(s => {
+          const isNeedReview = s.status === 'done' && !reviewedIds.has(s.id) && s.updatedAt >= startOfToday.getTime();
+          return {
+            ...s,
+            isNeedReview
+          };
+        });
+
+        // Cập nhật số lượng đếm trên tab Cần review
+        const totalNeedReview = enrichedSessions.filter(s => s.isNeedReview).length;
+        const reviewBtn = document.getElementById('reviewFilterBtn');
+        if (reviewBtn) {
+          reviewBtn.textContent = totalNeedReview > 0 ? ('Cần review (' + totalNeedReview + ')') : 'Cần review';
+        }
+
+        const filtered = enrichedSessions.filter(s => {
           if (query) {
             const match = (
               (s.title && s.title.toLowerCase().includes(query)) ||
               (s.issueId && s.issueId.toLowerCase().includes(query)) ||
               (s.repo && s.repo.toLowerCase().includes(query)) ||
               (s.branch && s.branch.toLowerCase().includes(query)) ||
-              (s.lastUserPrompt && s.lastUserPrompt.toLowerCase().includes(query)) ||
-              (s.lastAssistantResponse && s.lastAssistantResponse.toLowerCase().includes(query))
+              (s.lastUserPrompt && s.lastUserPrompt.toLowerCase().includes(query))
             );
             if (!match) return false;
           }
@@ -735,17 +839,19 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
             return s.updatedAt >= startOfToday.getTime();
           }
           if (currentFilter === 'active') {
-            return s.status === 'need_accept' || s.status === 'running';
+            // Đang chạy: gồm Chờ duyệt + Đang chạy + Cả những task vừa xong đang cần review
+            return s.status === 'need_accept' || s.status === 'running' || s.isNeedReview;
           }
-          if (currentFilter === 'all') {
-            return true;
+          if (currentFilter === 'review') {
+            return s.isNeedReview;
           }
           return true;
         });
 
         const needAcceptList = filtered.filter(s => s.status === 'need_accept');
         const runningList = filtered.filter(s => s.status === 'running');
-        const doneList = filtered.filter(s => s.status === 'done');
+        const needReviewList = filtered.filter(s => s.isNeedReview);
+        const doneList = filtered.filter(s => s.status === 'done' && !s.isNeedReview);
 
         let html = '';
 
@@ -777,6 +883,20 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           html += '</div>';
         }
 
+        if (needReviewList.length > 0) {
+          const isOpen = query ? true : sectionState.need_review;
+          html += '<div class="section-header" data-action="toggle-section" data-section="need_review">' +
+            '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
+              '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+            '</span>' +
+            '<span style="color: #c084fc; font-weight: 700;">VỪA XONG (CẦN REVIEW)</span>' +
+            '<span class="count-badge" style="background: rgba(168, 85, 247, 0.25); color: #e9d5ff;">' + needReviewList.length + '</span>' +
+          '</div>' +
+          '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
+          needReviewList.forEach(s => html += renderCard(s));
+          html += '</div>';
+        }
+
         if (doneList.length > 0) {
           const isOpen = query ? true : sectionState.done;
           html += '<div class="section-header" data-action="toggle-section" data-section="done">' +
@@ -792,10 +912,14 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         }
 
         if (filtered.length === 0) {
-          if (allSessions.length === 0) {
-            html = '<div style="text-align: center; color: #64748b; padding: 24px;">Chưa có phiên làm việc nào được ghi nhận.</div>';
-          } else if (currentFilter === 'today') {
-            html = '<div style="text-align: center; color: #64748b; padding: 24px;">Hôm nay chưa có phiên mới.<br><span style="font-size: 11.5px; opacity: 0.8; margin-top: 4px; display: inline-block;">Bấm tab <b>"Tất cả"</b> để xem lại các phiên trước đó.</span></div>';
+          if (currentFilter === 'review') {
+            html = '<div style="text-align: center; color: #64748b; padding: 32px 16px;">' +
+              '<div style="font-size: 24px; margin-bottom: 8px;">🎉</div>' +
+              '<div style="font-weight: 600; color: #94a3b8;">Không có task nào cần review</div>' +
+              '<div style="font-size: 11.5px; opacity: 0.7; margin-top: 4px;">Các task Claude vừa làm xong sẽ xuất hiện tại đây để bạn kiểm tra.</div>' +
+              '</div>';
+          } else if (currentFilter === 'active') {
+            html = '<div style="text-align: center; color: #64748b; padding: 24px;">Hiện không có task nào đang chạy hoặc chờ duyệt.</div>';
           } else {
             html = '<div style="text-align: center; color: #64748b; padding: 24px;">Không tìm thấy phiên làm việc nào phù hợp.</div>';
           }
@@ -851,7 +975,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       });
     });
 
-    // Event Delegation cho Content Container: xử lý click Card, Delete, Diff, Approve, Toggle Header
+    // Event Delegation cho Content Container: xử lý click Card, Delete, Diff, Approve, Toggle Header, Review
     if (contentContainer) {
       contentContainer.addEventListener('click', (e) => {
         const actionEl = e.target.closest('[data-action]');
@@ -876,7 +1000,10 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
 
         if (action === 'diff') {
           e.stopPropagation();
-          if (id) openSession(id);
+          if (id) {
+            markSessionReviewed(id);
+            openSession(id);
+          }
           return;
         }
 
@@ -886,8 +1013,26 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           return;
         }
 
+        if (action === 'review-open') {
+          e.stopPropagation();
+          if (id) {
+            markSessionReviewed(id);
+            openSession(id);
+          }
+          return;
+        }
+
+        if (action === 'mark-reviewed') {
+          e.stopPropagation();
+          if (id) markSessionReviewed(id);
+          return;
+        }
+
         if (action === 'open') {
-          if (id) openSession(id);
+          if (id) {
+            markSessionReviewed(id);
+            openSession(id);
+          }
           return;
         }
       });
@@ -897,8 +1042,12 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       const message = event.data;
       if (message.type === 'updateSessions') {
         allSessions = Array.isArray(message.sessions) ? message.sessions : [];
+        if (Array.isArray(message.reviewedIds)) {
+          message.reviewedIds.forEach(id => reviewedIds.add(id));
+        }
         const state = vscode.getState() || {};
         state.sessions = allSessions;
+        state.reviewedIds = Array.from(reviewedIds);
         vscode.setState(state);
         renderSessions();
       }
