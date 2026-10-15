@@ -1,4 +1,4 @@
-# Claude Session Manager (VS Code Extension)
+# Claude Session & Issue Tracker (VS Code Extension)
 
 [Tiếng Việt](README.vn.md) | **English**
 
