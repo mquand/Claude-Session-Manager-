@@ -1,136 +1,137 @@
 # Claude Session Manager (VS Code Extension)
 
+[Tiếng Việt](README.vn.md) | **English**
+
 [![Visual Studio Code](https://img.shields.io/badge/VS%20Code-Extension-blue.svg)](https://marketplace.visualstudio.com)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-brightgreen.svg)]()
-[![License](https://img.shields.io/badge/License-MIT-green.svg)]()
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> Extension trực quan, nhẹ và realtime giúp theo dõi, quản lý, phân loại và chuyển đổi nhanh giữa các session làm việc của **Claude Code** trực tiếp ngay trong VS Code. Hỗ trợ cả làm việc theo **Issue Ticket (`#xxxx`)** lẫn **Chat tự do hàng ngày**.
-
----
-
-## 💡 Vấn đề giải quyết
-
-Khi sử dụng Claude Code (hoặc Claude Dev/Cline):
-- Bạn thường mở nhiều task cùng lúc nhưng không biết task nào **đang chạy**, task nào **đã xong**, task nào **đang dừng chờ duyệt lệnh (`need accept`)**.
-- Lịch sử chat bị trôi, khó tìm lại đúng ngữ cảnh cũ.
-- Khi bấm duyệt hoặc muốn quay lại cuộc trò chuyện cũ, phải gõ lệnh hoặc tìm thủ công.
-
-**Claude Session Manager** quét trực tiếp runtime session và lịch sử của Claude Code trên máy bạn để tạo thành một bảng Dashboard trực quan 1-chạm ngay trên thanh công cụ của VS Code.
+> A fast, lightweight, and real-time VS Code extension to monitor, organize, categorize, and switch between **Claude Code** sessions effortlessly. Seamlessly supports both **Issue/Ticket-based workflows (`#xxxx`)** and **free-form ad-hoc chats**.
 
 ---
 
-## ✨ Tính năng chính
+## 💡 Why Claude Session Manager?
 
-### 1. Giám sát trạng thái theo thời gian thực (Real-time OS Monitoring)
-- 🔵 **ĐANG CHẠY (`Running`)**: Nhận diện chính xác theo tiến trình hệ điều hành (Process ID - PID). Chỉ khi nào tiến trình Claude đang thực thi thật sự trên OS thì mới xếp vào Đang chạy.
-- 🟡 **CHỜ DUYỆT (`Need Accept`)**: Phát hiện ngay khoảnh khắc Claude dừng lại để xin phép bạn thực thi lệnh terminal nguy hiểm hoặc apply code diff.
-- 🟢 **ĐÃ HOÀN THÀNH (`Done`)**: Các phiên làm việc đã hoàn tất.
+When working extensively with Claude Code (or autonomous AI agent workflows):
+- You often have multiple tasks running simultaneously and lose track of which session is **running**, which is **done**, and which is **awaiting your approval (`need accept`)**.
+- Chat logs accumulate over time, making it hard to find and switch back to previous contexts.
+- Reviewing command execution or jumping back into an old session requires manually finding session IDs or typing terminal commands.
 
-### 2. Tự động tương thích 2 chế độ làm việc:
-- **Làm việc tự do (Không dùng Issue)**: Nếu bạn chỉ chat fix bug, test code bình thường (ví dụ: `fix auth bug`, `tets`, `xoá file cũ`), extension tự động lấy câu hỏi đầu tiên làm tiêu đề, không hiện rác `#0`.
-- **Làm việc theo Issue / Ticket**: Tự động nhận diện cú pháp `#<số>` (ví dụ: `#100`, `#7152`, `#5433`) để gắn **Badge Issue màu xanh** nổi bật, giúp lọc và tìm nhanh theo từng ticket dự án.
-
-### 3. Thông báo đa điểm tiện lợi (2 vị trí)
-- **Thanh Activity Bar (Sidebar bên trái)**: Icon **Claude Issues** kèm **Badge số** nhảy realtime khi có task cần duyệt lệnh.
-- **Thanh Status Bar (Dưới đáy màn hình)**: Hiển thị nhanh số task đang xử lý (ví dụ: `🔔 Claude: 1 Chờ duyệt` hoặc `✨ Claude: 5 Tasks`), 1 click mở ngay panel.
-
-### 4. 1-Click mở đúng cuộc trò chuyện (Instant Session Jump)
-- Click vào bất kỳ card nào trên giao diện ➔ VS Code sẽ kích hoạt trực tiếp Claude Code chuyển thẳng đến đúng session đó.
-
-### 5. Thống kê chi tiết & Thiết kế Clean, phẳng (No Bloat)
-Mỗi card hiển thị đầy đủ thông số kỹ thuật được tối ưu trên 1 dòng gọn gàng:
-- 🕒 **Thời gian tương đối**: `3 phút trước`, `2 giờ trước`, `5 ngày trước`...
-- 💻 **Môi trường**: `<> VS Code` hoặc `Terminal`
-- 🌿 **Git Branch**: Nhận diện đúng nhánh git đang làm việc
-- ✨ **Model AI**: `Opus 5.5`, `Sonnet 3.7`...
-- 🗄️ **Tokens In / Out**: Quy đổi chuẩn `K`, `M`, `B` (vd: `1.5B · 2.4M ra`)
-- 💵 **Chi phí ($ USD)**: Tổng tiền API tiêu thụ của session
-- 💬 **Số lượt tương tác (Turns) & Session ID rút gọn** (8 ký tự cuối)
-
-### 6. Tốc độ mở 0ms & Tự động Purge Cache
-- Sử dụng cơ chế In-Memory Cache và bộ đệm 64KB stream, mở extension là render ngay lập tức.
-- Tự động phát hiện và loại bỏ các session mà file đã bị xóa trên máy, không lưu rác.
+**Claude Session Manager** inspects active OS runtime processes and session transcripts in real-time, bringing an interactive, clean, single-click task dashboard right into your VS Code Sidebar and Status Bar.
 
 ---
 
-## 🛠️ Cài đặt
+## ✨ Key Features
 
-### Cách 1: Cài đặt từ file đóng gói `.vsix` (Khuyên dùng cho người dùng)
+### 1. Real-Time OS Process & State Tracking
+- 🔵 **Running**: Tracked directly via OS-level Process ID (PID) liveness. The session only shows as running when the Claude process is actively alive in system memory.
+- 🟡 **Need Accept**: Instantly alerts you when Claude is paused waiting for your permission (dangerous shell commands, file modifications, or plan approvals).
+- 🟢 **Done**: Tasks that have completed their turn.
 
-Dành cho mọi máy macOS, Windows, Linux mà không cần cài Node.js hay build code:
+### 2. Dual Workflow Modes
+- **Ticket / Issue-Driven Workflow**: Automatically parses issue tags matching `#<number>` (e.g., `#100`, `#7152`, `#5433`), displays a dedicated highlighted badge, and cleans up redundant text from session titles.
+- **Free-Form Chat Workflow**: When no issue number is present, it intelligently extracts your initial query as the concise session title without placeholder artifacts.
 
-1. Tải file **`claude-session-manager-0.1.0.vsix`** từ Release / thư mục repository.
-2. Mở VS Code, nhấn tổ hợp phím:
+### 3. Dual Notification Access Points
+- **Activity Bar (Sidebar)**: Custom Claude icon with a **real-time numeric badge** indicating active tasks requiring approval.
+- **Status Bar (Bottom Right)**: Live indicator (e.g., `🔔 Claude: 1 Need Accept` or `✨ Claude: 5 Tasks`) that focuses the panel with a single click.
+
+### 4. 1-Click Instant Session Switch
+Click on any session card to immediately open and focus the corresponding conversation tab in Claude Code.
+
+### 5. Clean, Single-Line Meta Layout (Zero Clutter)
+Every session card displays rich, distraction-free technical metrics neatly truncated on single lines:
+- 🕒 **Relative Timestamp**: `3 minutes ago`, `2 hours ago`, `5 days ago`...
+- 💻 **Environment Source**: `VS Code` or `Terminal`
+- 🌿 **Git Branch**: Identifies the working git branch per session.
+- ✨ **Model Identifier**: `Opus 5.5`, `Sonnet 3.7`, `Haiku 3.5`...
+- 🗄️ **Token Metrics**: Compact human-readable token counts (`1.5B · 2.4M out`).
+- 💵 **Cost Tracking**: Accurate calculated USD API expense per task.
+- 💬 **Turns Count & Short Session ID** (first 8 characters).
+
+### 6. Sub-millisecond Load Times & Auto Cache Purge
+- Employs in-memory caching and 64KB chunked file streaming for instantaneous 0ms panel rendering.
+- Automatically purges deleted session files to keep your dashboard clean.
+
+---
+
+## 🛠️ Installation
+
+### Method 1: Install from `.vsix` Package (Recommended for Users)
+
+Compatible with macOS, Linux, and Windows without requiring Node.js:
+
+1. Download **`claude-session-manager-0.1.0.vsix`** from the latest GitHub Release or repository root.
+2. Open VS Code and press:
    - **macOS**: `Cmd + Shift + P`
    - **Windows / Linux**: `Ctrl + Shift + P`
-3. Gõ:
+3. Type:
    ```text
    Extensions: Install from VSIX...
    ```
-4. Chọn file `claude-session-manager-0.1.0.vsix` và bấm **Install**.
-5. Nhấn **Reload Window** (`Developer: Reload Window`).
+4. Select the downloaded `.vsix` file and click **Install**.
+5. Reload VS Code (`Developer: Reload Window`).
 
 ---
 
-### Cách 2: Cài đặt & Phát triển từ mã nguồn (Dành cho Developers)
+### Method 2: Development & Source Build
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/<your-username>/claude-session-manager.git
-cd claude-session-manager
+git clone https://github.com/mquand/Claude-Session-Manager-.git
+cd Claude-Session-Manager-
 
-# 2. Cài đặt dependencies
+# 2. Install dependencies
 npm install
 
-# 3. Biên dịch mã nguồn TypeScript
+# 3. Compile TypeScript
 npm run compile
 
-# 4. Mở trong VS Code và nhấn phím F5 để chạy Debug
+# 4. Open in VS Code and press F5 to launch the Extension Development Host
 code .
 ```
 
 ---
 
-## ⚙️ Cấu hình (Settings)
+## ⚙️ Configuration
 
-Extension tự động tìm kiếm theo đường dẫn mặc định của Claude Code trên máy tính của bạn:
-- `~/.claude/projects` (lịch sử hội thoại `.jsonl`)
-- `~/.claude/sessions` (runtime PID đang active)
+The extension defaults to standard Claude Code directories:
+- `~/.claude/projects` (session transcript logs)
+- `~/.claude/sessions` (active runtime PID states)
 
-Nếu bạn thay đổi cấu hình Claude Code sang thư mục khác:
-1. Mở **Settings** (`Cmd + ,` hoặc `Ctrl + ,`).
-2. Tìm từ khóa `Claude Session Manager`.
-3. Tùy chỉnh:
-   - `claudeSessionManager.storagePath`: Đường dẫn thư mục projects tùy chỉnh.
-   - `claudeSessionManager.autoRefreshInterval`: Tần suất quét định kỳ (mặc định: `10` giây).
+To customize settings:
+1. Open VS Code Settings (`Cmd + ,` or `Ctrl + ,`).
+2. Search for `Claude Session Manager`.
+3. Configurable properties:
+   - `claudeSessionManager.storagePath`: Custom path to your Claude project directory.
+   - `claudeSessionManager.autoRefreshInterval`: Background scan interval in seconds (default: `10`).
 
 ---
 
-## 📦 Hướng dẫn đóng gói bản `.vsix` mới
+## 📦 Building a New `.vsix` Release
 
-Nếu bạn chỉnh sửa code và muốn đóng gói file cài đặt để chia sẻ hoặc phát hành lên GitHub Releases:
+To package a new release for distribution:
 
 ```bash
-# Build TypeScript
 npm run compile
-
-# Đóng gói VSIX
-npx @vscode/vsce package --no-dependencies --allow-missing-repository
+npx @vscode/vsce package --no-dependencies
 ```
 
----
-
-## 🤝 Đóng góp & Phát triển (Contributing)
-
-Mọi đóng góp, báo lỗi (Issues) hoặc tính năng mới (Pull Requests) đều được hoan nghênh:
-1. Fork dự án
-2. Tạo branch tính năng (`git checkout -b feature/tinh-nang-moi`)
-3. Commit thay đổi (`git commit -m 'feat: thêm bộ lọc dự án'`)
-4. Push branch (`git push origin feature/tinh-nang-moi`)
-5. Mở Pull Request trên GitHub
+This outputs `claude-session-manager-0.1.0.vsix`, ready to be attached to GitHub Releases.
 
 ---
 
-## 📄 Bản quyền (License)
+## 🤝 Contributing
 
-Dự án được phát hành theo giấy phép [MIT License](LICENSE).
+Contributions, bug reports, and feature requests are welcome!
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
