@@ -32,6 +32,10 @@ class IssuesViewProvider {
                     await this.refresh();
                     break;
                 }
+                case 'openSettings': {
+                    await vscode.commands.executeCommand('workbench.action.openSettings', 'claudeSessionManager');
+                    break;
+                }
                 case 'openSession': {
                     try {
                         await vscode.commands.executeCommand('claude-vscode.primaryEditor.open', data.id);
@@ -151,8 +155,15 @@ class IssuesViewProvider {
       box-sizing: border-box;
     }
 
+    .search-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
     .search-input {
-      width: 100%;
+      flex: 1;
       background: var(--vscode-input-background, #1a1e26);
       color: var(--vscode-input-foreground, #fff);
       border: 1px solid var(--vscode-input-border, #2d3340);
@@ -160,8 +171,46 @@ class IssuesViewProvider {
       padding: 6px 10px;
       font-size: 12px;
       outline: none;
-      margin-bottom: 8px;
       box-sizing: border-box;
+      height: 28px;
+    }
+
+    .search-input:focus {
+      border-color: #3b82f6;
+    }
+
+    .icon-tool-btn {
+      background: #1a1e26;
+      color: #94a3b8;
+      border: 1px solid var(--vscode-input-border, #2d3340);
+      border-radius: 4px;
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
+      padding: 0;
+    }
+
+    .icon-tool-btn:hover {
+      background: #232834;
+      color: #ffffff;
+      border-color: #3e4657;
+    }
+
+    .icon-tool-btn:active {
+      transform: scale(0.92);
+    }
+
+    .spin {
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
     }
 
     .filter-tabs {
@@ -385,7 +434,20 @@ class IssuesViewProvider {
   </style>
 </head>
 <body>
-  <input type="text" id="searchInput" class="search-input" placeholder="Tìm kiếm Issue (#xxxx), nội dung..." />
+  <div class="search-bar-row">
+    <input type="text" id="searchInput" class="search-input" placeholder="Tìm kiếm (#xxxx, nội dung)..." />
+    <button id="refreshBtn" class="icon-tool-btn" title="Làm mới danh sách (Refresh)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+      </svg>
+    </button>
+    <button id="settingsBtn" class="icon-tool-btn" title="Cài đặt cấu hình (Settings)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
+  </div>
 
   <!-- 2 Tab Tối Giản -->
   <div class="filter-tabs">
@@ -413,6 +475,21 @@ class IssuesViewProvider {
     const searchInput = document.getElementById('searchInput');
     searchInput.addEventListener('input', () => {
       renderSessions();
+    });
+
+    const refreshBtn = document.getElementById('refreshBtn');
+    refreshBtn.addEventListener('click', () => {
+      const svg = refreshBtn.querySelector('svg');
+      if (svg) svg.classList.add('spin');
+      vscode.postMessage({ type: 'refresh' });
+      setTimeout(() => {
+        if (svg) svg.classList.remove('spin');
+      }, 600);
+    });
+
+    const settingsBtn = document.getElementById('settingsBtn');
+    settingsBtn.addEventListener('click', () => {
+      vscode.postMessage({ type: 'openSettings' });
     });
 
     document.querySelectorAll('.filter-btn').forEach(btn => {
