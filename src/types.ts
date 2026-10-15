@@ -2,14 +2,14 @@ export type SessionStatus = 'need_accept' | 'done' | 'running' | 'failed' | 'que
 
 export interface ClaudeSession {
   id: string;
-  issueId?: string;           // Ví dụ: #100, #101
+  issueId?: string;           // Ví dụ: #101, #204
   title: string;             // Tiêu đề
-  repo: string;              // Ví dụ: "app-backend", "lima"
-  branch: string;            // Ví dụ: "develop", "master"
+  repo: string;              // Ví dụ: "web-app", "backend-api"
+  branch: string;            // Ví dụ: "main", "feature/login"
   isWorktree?: boolean;      // Đang chạy trên Git Worktree
   status: SessionStatus;
   statusMessage: string;     // Ví dụ: "3 phút trước", "3 ngày trước"
-  lastUserPrompt?: string;   // Ví dụ: "> làm đi, mục tiêu..."
+  lastUserPrompt?: string;   // Ví dụ: "> cập nhật giao diện..."
   lastAssistantResponse?: string;
   updatedAt: number;
   filePath?: string;
