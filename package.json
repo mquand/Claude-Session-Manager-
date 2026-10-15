@@ -1,0 +1,74 @@
+{
+  "name": "claude-session-manager",
+  "displayName": "Claude Session & Issue Manager",
+  "description": "Quản lý các issue, session, và trạng thái hội thoại của Claude trực tiếp trên VS Code",
+  "version": "0.1.0",
+  "publisher": "antigravity",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Productivity"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "claude-session-manager-sidebar",
+          "title": "Claude Issues",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "claude-session-manager-sidebar": [
+        {
+          "type": "webview",
+          "id": "claudeSessionManager.issuesView",
+          "name": "Claude Issue Sessions"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "claudeSessionManager.refresh",
+        "title": "Làm mới danh sách Sessions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "claudeSessionManager.openSettings",
+        "title": "Cấu hình đường dẫn lưu trữ"
+      }
+    ],
+    "configuration": {
+      "title": "Claude Session Manager",
+      "properties": {
+        "claudeSessionManager.storagePath": {
+          "type": "string",
+          "default": "~/.claude/projects",
+          "description": "Đường dẫn chứa lịch sử session hoặc file transcript của Claude"
+        },
+        "claudeSessionManager.autoRefreshInterval": {
+          "type": "number",
+          "default": 10,
+          "description": "Thời gian tự động quét lại (giây)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}

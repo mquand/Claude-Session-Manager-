@@ -1,0 +1,11 @@
+.vscode/**
+!dist/**
+!resources/**
+!package.json
+!README.md
+!LICENSE
+src/**
+node_modules/**
+tsconfig.json
+*.log
+.DS_Store
