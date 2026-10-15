@@ -7,12 +7,14 @@ import { ExtensionUpdater } from './updater';
 export class IssuesViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'claudeSessionManager.issuesView';
   public static readonly explorerViewType = 'claudeSessionManager.sessionExplorer';
+  public static readonly scmViewType = 'claudeSessionManager.sessionScm';
   private _views: Set<vscode.WebviewView> = new Set();
   private _watchers: vscode.FileSystemWatcher[] = [];
   private _refreshTimer?: NodeJS.Timeout;
   private _debounceTimer?: NodeJS.Timeout;
   private _statusBarItem: vscode.StatusBarItem;
   private _lastSessions: ClaudeSession[] = [];
+  private _currentWorktreeFilter: string = '';
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -66,6 +68,9 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
   ) {
     this._views.add(webviewView);
 
+    // Luôn đảm bảo tên hiển thị thống nhất là "Claude Sessions", không bị tiền tố "Explorer: "
+    webviewView.title = 'Claude Sessions';
+
     webviewView.onDidDispose(() => {
       this._views.delete(webviewView);
     });
@@ -85,7 +90,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
             sessions: this._lastSessions,
             reviewedIds: this.getReviewedIds(),
             currentWorkspace: this.getCurrentWorkspace(),
-            lang: this.getLanguage()
+            lang: this.getLanguage(),
+            worktreeFilter: this._currentWorktreeFilter
           });
         }
         this.refresh();
@@ -101,10 +107,35 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
               sessions: this._lastSessions,
               reviewedIds: this.getReviewedIds(),
               currentWorkspace: this.getCurrentWorkspace(),
-              lang: this.getLanguage()
+              lang: this.getLanguage(),
+              worktreeFilter: this._currentWorktreeFilter
             });
           }
           await this.refresh();
+          break;
+        }
+        case 'openWorktreePicker': {
+          await this.showWorktreeQuickPick();
+          break;
+        }
+        case 'clearWorktreeFilter': {
+          this._currentWorktreeFilter = '';
+          for (const view of this._views) {
+            view.webview.postMessage({
+              type: 'setWorktreeFilter',
+              branch: ''
+            });
+          }
+          break;
+        }
+        case 'setWorktreeFromCard': {
+          this._currentWorktreeFilter = data.branch || '';
+          for (const view of this._views) {
+            view.webview.postMessage({
+              type: 'setWorktreeFilter',
+              branch: this._currentWorktreeFilter
+            });
+          }
           break;
         }
         case 'refresh': {
@@ -169,6 +200,67 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
 
     this.setupRealtimeWatchers();
     this.refresh();
+  }
+
+  public async showWorktreeQuickPick() {
+    const lang = this.getLanguage();
+    const worktreeMap = new Map<string, { branch: string; cwd?: string; repo?: string; count: number; lastTime: number }>();
+
+    for (const s of this._lastSessions) {
+      if (s.branch) {
+        const key = s.branch;
+        const existing = worktreeMap.get(key);
+        if (existing) {
+          existing.count++;
+          if (s.updatedAt > existing.lastTime) {
+            existing.lastTime = s.updatedAt;
+            if (s.cwd) existing.cwd = s.cwd;
+          }
+        } else {
+          worktreeMap.set(key, {
+            branch: s.branch,
+            cwd: s.cwd,
+            repo: s.repo,
+            count: 1,
+            lastTime: s.updatedAt
+          });
+        }
+      }
+    }
+
+    const items: (vscode.QuickPickItem & { branch?: string })[] = [
+      {
+        label: lang === 'en' ? '$(list-unordered) All worktrees / branches' : '$(list-unordered) Tất cả worktree / nhánh',
+        description: lang === 'en' ? 'Show all sessions' : 'Hiển thị tất cả sessions',
+        branch: ''
+      }
+    ];
+
+    const sorted = Array.from(worktreeMap.values()).sort((a, b) => b.lastTime - a.lastTime);
+    for (const item of sorted) {
+      const isCurrent = item.branch === this._currentWorktreeFilter;
+      const checkMark = isCurrent ? '✓ ' : '';
+      items.push({
+        label: `$(git-branch) ${checkMark}${item.branch}`,
+        description: `${item.count} session${item.count > 1 ? 's' : ''}${item.repo ? ' • ' + item.repo : ''}`,
+        detail: item.cwd ? (lang === 'en' ? `Directory: ${item.cwd}` : `Thư mục: ${item.cwd}`) : undefined,
+        branch: item.branch
+      });
+    }
+
+    const selected = await vscode.window.showQuickPick(items, {
+      placeHolder: lang === 'en' ? 'Select Git Worktree / Branch to filter sessions...' : 'Chọn Git Worktree / Nhánh để lọc các phiên hội thoại...'
+    });
+
+    if (selected !== undefined) {
+      this._currentWorktreeFilter = selected.branch || '';
+      for (const view of this._views) {
+        view.webview.postMessage({
+          type: 'setWorktreeFilter',
+          branch: this._currentWorktreeFilter
+        });
+      }
+    }
   }
 
   public setupRealtimeWatchers() {
@@ -272,7 +364,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         sessions,
         reviewedIds: this.getReviewedIds(),
         currentWorkspace,
-        lang
+        lang,
+        worktreeFilter: this._currentWorktreeFilter
       });
     }
 
@@ -586,6 +679,54 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       font-weight: 600;
     }
 
+    .ws-pill-worktree {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .ws-pill-worktree.active {
+      background: rgba(16, 185, 129, 0.18);
+      color: #10b981;
+      border-color: rgba(16, 185, 129, 0.45);
+      font-weight: 600;
+    }
+
+    body.vscode-light .ws-pill-worktree.active {
+      background: rgba(16, 185, 129, 0.12);
+      color: #059669;
+      border-color: rgba(16, 185, 129, 0.35);
+    }
+
+    .ws-worktree-clear {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      font-size: 8.5px;
+      line-height: 1;
+      margin-left: 2px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .ws-worktree-clear:hover {
+      background: rgba(239, 68, 68, 0.85);
+      color: #ffffff;
+    }
+
+    body.vscode-light .ws-worktree-clear {
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    body.vscode-light .ws-worktree-clear:hover {
+      background: #ef4444;
+      color: #ffffff;
+    }
+
     .ws-dot {
       width: 6px;
       height: 6px;
@@ -807,6 +948,15 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       align-items: center;
       gap: 3px;
       flex-shrink: 0;
+      cursor: pointer;
+      border-radius: 3px;
+      padding: 1px 3px;
+      transition: background 0.15s ease, opacity 0.15s ease;
+    }
+
+    .branch-info:hover {
+      background: var(--pill-hover-bg);
+      opacity: 0.9;
     }
 
     .branch-name {
@@ -831,6 +981,13 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       font-weight: 600;
       text-transform: uppercase;
       flex-shrink: 0;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .worktree-badge:hover {
+      background: rgba(245, 158, 11, 0.25);
+      border-color: rgba(245, 158, 11, 0.5);
     }
 
     .issue-badge {
@@ -1004,6 +1161,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         <span class="ws-dot"></span>
         <span id="wsCurrentName"></span>
       </button>
+      <button class="ws-pill ws-pill-worktree" id="wsBtnWorktree" style="display: none;" title="Lọc theo Git Worktree (Click để chọn trong Popup)">
+        <span class="ws-worktree-icon">🌿</span>
+        <span id="wsWorktreeLabel">Worktree: Tất cả ▾</span>
+        <span id="wsWorktreeClear" class="ws-worktree-clear" style="display: none;" title="Bỏ lọc worktree">✕</span>
+      </button>
     </div>
     <div class="ws-tokens-badge" id="wsTokensBadge" title="Tổng số token Claude đã dùng hôm nay">
       <span class="ws-tokens-label">tokens:</span>
@@ -1036,6 +1198,9 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     const wsBtnAll = document.getElementById('wsBtnAll');
     const wsCurrentName = document.getElementById('wsCurrentName');
     const wsAllText = document.getElementById('wsAllText');
+    const wsBtnWorktree = document.getElementById('wsBtnWorktree');
+    const wsWorktreeLabel = document.getElementById('wsWorktreeLabel');
+    const wsWorktreeClear = document.getElementById('wsWorktreeClear');
     const wsTokensBadge = document.getElementById('wsTokensBadge');
     const wsTokensNum = document.getElementById('wsTokensNum');
 
@@ -1045,6 +1210,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     let reviewedIds = new Set(Array.isArray(savedState.reviewedIds) ? savedState.reviewedIds : []);
     let currentFilter = savedState.currentFilter || 'today';
     let currentWorkspace = savedState.currentWorkspace || null;
+    let currentWorktree = savedState.currentWorktree || null;
     let wsMode = savedState.wsMode || 'current';
     let currentLang = savedState.lang || 'vi';
     let sectionState = savedState.sectionState || {
@@ -1115,6 +1281,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         reviewedIds: Array.from(reviewedIds),
         currentFilter,
         currentWorkspace,
+        currentWorktree,
         wsMode,
         lang: currentLang,
         sectionState
@@ -1200,11 +1367,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       const reviewBadge = s.isNeedReview ? '<span class="review-badge">' + t('tabReview') + '</span>' : '';
       
       const branchFooterItem = s.branch ? (
-        '<span class="footer-meta-item branch-info" title="Git Branch: ' + escapeHtml(s.branch) + '">' +
+        '<span class="footer-meta-item branch-info" data-action="filter-worktree" data-branch="' + escapeHtml(s.branch) + '" title="' + (currentLang === 'en' ? 'Click to filter worktree: ' : 'Click để lọc theo worktree: ') + escapeHtml(s.branch) + '">' +
           '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>' +
           'branch: <span class="branch-name">' + escapeHtml(s.branch) + '</span>' +
         '</span>' +
-        (s.isWorktree ? '<span class="worktree-badge">worktree</span>' : '')
+        (s.isWorktree ? '<span class="worktree-badge" data-action="filter-worktree" data-branch="' + escapeHtml(s.branch) + '" title="' + (currentLang === 'en' ? 'Git Worktree: ' : 'Git Worktree: ') + escapeHtml(s.branch) + '">worktree</span>' : '')
       ) : '';
 
       const footerMetaRow = '<div class="footer-meta-row">' +
@@ -1277,15 +1444,41 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           }
         }
 
+        // Cập nhật nút Worktree
+        const hasAnyWorktree = allSessions.some(s => !!s.branch);
+        if (wsBtnWorktree) {
+          if (hasAnyWorktree) {
+            wsBtnWorktree.style.display = 'inline-flex';
+            if (currentWorktree) {
+              wsBtnWorktree.classList.add('active');
+              if (wsWorktreeLabel) wsWorktreeLabel.textContent = currentWorktree;
+              if (wsWorktreeClear) wsWorktreeClear.style.display = 'inline-flex';
+            } else {
+              wsBtnWorktree.classList.remove('active');
+              if (wsWorktreeLabel) wsWorktreeLabel.textContent = currentLang === 'en' ? 'Worktree: All ▾' : 'Worktree: Tất cả ▾';
+              if (wsWorktreeClear) wsWorktreeClear.style.display = 'none';
+            }
+          } else {
+            wsBtnWorktree.style.display = 'none';
+          }
+        }
+
         // Tính tổng token đã dùng hôm nay theo phạm vi lọc
         const todaySessions = allSessions.filter(s => s.updatedAt >= startOfToday.getTime());
-        const tokenSessions = (wsMode === 'current' && currentWorkspace && currentWorkspace.name)
+        let tokenSessions = (wsMode === 'current' && currentWorkspace && currentWorkspace.name)
           ? todaySessions.filter(s => {
               if (!s.repo) return true;
               const targetRepo = currentWorkspace.name.toLowerCase();
               return s.repo.toLowerCase() === targetRepo || (s.cwd && s.cwd.toLowerCase().includes(targetRepo));
             })
           : todaySessions;
+
+        if (currentWorktree) {
+          const targetWt = currentWorktree.toLowerCase();
+          tokenSessions = tokenSessions.filter(s => {
+            return (s.branch && s.branch.toLowerCase() === targetWt) || (s.cwd && s.cwd.toLowerCase().includes(targetWt));
+          });
+        }
 
         let todayTotalTokens = 0;
         let todayInTokens = 0;
@@ -1308,7 +1501,10 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           wsTokensNum.textContent = formatTokensSimple(todayTotalTokens);
         }
         if (wsTokensBadge) {
-          const scopeLabel = (wsMode === 'current' && currentWorkspace && currentWorkspace.name) ? currentWorkspace.name : (t('wsAll') || 'Tất cả dự án');
+          let scopeLabel = (wsMode === 'current' && currentWorkspace && currentWorkspace.name) ? currentWorkspace.name : (t('wsAll') || 'Tất cả dự án');
+          if (currentWorktree) {
+            scopeLabel += ' • ' + currentWorktree;
+          }
           const inFormatted = formatTokensSimple(todayInTokens);
           const outFormatted = formatTokensSimple(todayOutTokens);
           const numFormatted = todayTotalTokens.toLocaleString();
@@ -1344,6 +1540,14 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
             if (!s.repo) return true;
             const sRepo = s.repo.toLowerCase();
             return sRepo === targetRepo || (s.cwd && s.cwd.toLowerCase().includes(targetRepo));
+          });
+        }
+
+        // Lọc theo Git Worktree / Nhánh (nếu người dùng chọn 1 worktree cụ thể)
+        if (currentWorktree) {
+          const targetWt = currentWorktree.toLowerCase();
+          filtered = filtered.filter(s => {
+            return (s.branch && s.branch.toLowerCase() === targetWt) || (s.cwd && s.cwd.toLowerCase().includes(targetWt));
           });
         }
 
@@ -1493,6 +1697,20 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       });
     }
 
+    if (wsBtnWorktree) {
+      wsBtnWorktree.addEventListener('click', (e) => {
+        if (e.target.closest('#wsWorktreeClear')) {
+          e.stopPropagation();
+          currentWorktree = null;
+          saveState();
+          renderSessions();
+          vscode.postMessage({ type: 'clearWorktreeFilter' });
+          return;
+        }
+        vscode.postMessage({ type: 'openWorktreePicker' });
+      });
+    }
+
     filterBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         filterBtns.forEach(b => b.classList.remove('active'));
@@ -1503,13 +1721,25 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       });
     });
 
-    // Event Delegation cho Content Container: xử lý click Card, Delete, Diff, Approve, Toggle Header, Review
+    // Event Delegation cho Content Container: xử lý click Card, Delete, Diff, Approve, Toggle Header, Review, Filter Worktree
     if (contentContainer) {
       contentContainer.addEventListener('click', (e) => {
         const actionEl = e.target.closest('[data-action]');
         if (!actionEl) return;
         const action = actionEl.getAttribute('data-action');
         const id = actionEl.getAttribute('data-id');
+
+        if (action === 'filter-worktree') {
+          e.stopPropagation();
+          const branch = actionEl.getAttribute('data-branch');
+          if (branch) {
+            currentWorktree = branch;
+            saveState();
+            renderSessions();
+            vscode.postMessage({ type: 'setWorktreeFromCard', branch });
+          }
+          return;
+        }
 
         if (action === 'toggle-section') {
           const section = actionEl.getAttribute('data-section');
@@ -1581,6 +1811,12 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         renderSessions();
         return;
       }
+      if (message.type === 'setWorktreeFilter') {
+        currentWorktree = message.branch || null;
+        saveState();
+        renderSessions();
+        return;
+      }
       if (message.type === 'updateSessions') {
         allSessions = Array.isArray(message.sessions) ? message.sessions : [];
         if (Array.isArray(message.reviewedIds)) {
@@ -1591,6 +1827,9 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         }
         if (message.lang) {
           currentLang = message.lang;
+        }
+        if (message.worktreeFilter !== undefined) {
+          currentWorktree = message.worktreeFilter || null;
         }
         saveState();
         renderSessions();

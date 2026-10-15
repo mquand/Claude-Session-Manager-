@@ -5,29 +5,32 @@ import { ExtensionUpdater } from './updater';
 export function activate(context: vscode.ExtensionContext) {
   const provider = new IssuesViewProvider(context.extensionUri, context);
 
-  // Đăng ký cho Activity Bar view
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(
-      IssuesViewProvider.viewType,
-      provider
-    )
-  );
+  // Đăng ký cho tất cả các view container: Activity Bar, Explorer, Source Control (và legacy IDs để phòng ngừa cache cũ)
+  const viewTypes = [
+    IssuesViewProvider.viewType,
+    IssuesViewProvider.explorerViewType,
+    'claudeSessionManager.explorerView',
+    IssuesViewProvider.scmViewType,
+    'claudeSessionManager.scmView'
+  ];
 
-  // Đăng ký cho Explorer view (khi người dùng bật hiển thị trong Explorer)
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(
-      IssuesViewProvider.explorerViewType,
-      provider
-    )
-  );
+  for (const vt of viewTypes) {
+    context.subscriptions.push(
+      vscode.window.registerWebviewViewProvider(vt, provider, {
+        webviewOptions: { retainContextWhenHidden: true }
+      })
+    );
+  }
 
-  // Cập nhật context key khi cài đặt showInExplorer thay đổi
-  const updateExplorerContext = () => {
+  // Cập nhật context keys khi cài đặt thay đổi
+  const updateContexts = () => {
     const config = vscode.workspace.getConfiguration('claudeSessionManager');
-    const show = config.get<boolean>('showInExplorer', true);
-    vscode.commands.executeCommand('setContext', 'claudeSessionManager.showInExplorer', show);
+    const showExplorer = config.get<boolean>('showInExplorer', true);
+    const showScm = config.get<boolean>('showInSourceControl', true);
+    vscode.commands.executeCommand('setContext', 'claudeSessionManager.showInExplorer', showExplorer);
+    vscode.commands.executeCommand('setContext', 'claudeSessionManager.showInSourceControl', showScm);
   };
-  updateExplorerContext();
+  updateContexts();
 
   context.subscriptions.push(
     vscode.commands.registerCommand('claudeSessionManager.focusView', () => {
@@ -85,13 +88,27 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('claudeSessionManager.toggleExplorerView', async () => {
       const config = vscode.workspace.getConfiguration('claudeSessionManager');
-      const current = config.get<boolean>('showInExplorer', false);
+      const current = config.get<boolean>('showInExplorer', true);
       const next = !current;
       await config.update('showInExplorer', next, vscode.ConfigurationTarget.Global);
       vscode.window.showInformationMessage(
         next
           ? 'Đã bật hiển thị Claude Sessions trong thanh Explorer (File Tree).'
           : 'Đã tắt hiển thị Claude Sessions khỏi thanh Explorer.'
+      );
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('claudeSessionManager.toggleSourceControlView', async () => {
+      const config = vscode.workspace.getConfiguration('claudeSessionManager');
+      const current = config.get<boolean>('showInSourceControl', true);
+      const next = !current;
+      await config.update('showInSourceControl', next, vscode.ConfigurationTarget.Global);
+      vscode.window.showInformationMessage(
+        next
+          ? 'Đã bật hiển thị Claude Sessions trong thanh Source Control (Git).'
+          : 'Đã tắt hiển thị Claude Sessions khỏi thanh Source Control.'
       );
     })
   );
@@ -117,8 +134,11 @@ export function activate(context: vscode.ExtensionContext) {
   // Lắng nghe cấu hình thay đổi để cập nhật tự động
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('claudeSessionManager.showInExplorer')) {
-        updateExplorerContext();
+      if (
+        e.affectsConfiguration('claudeSessionManager.showInExplorer') ||
+        e.affectsConfiguration('claudeSessionManager.showInSourceControl')
+      ) {
+        updateContexts();
       }
       if (e.affectsConfiguration('claudeSessionManager')) {
         provider.refresh();

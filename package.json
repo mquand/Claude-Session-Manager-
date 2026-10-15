@@ -2,7 +2,7 @@
   "name": "claude-session-manager",
   "displayName": "Claude Session & Issue Manager",
   "description": "Quản lý các issue, session, và trạng thái hội thoại của Claude trực tiếp trên VS Code",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "mquand",
   "author": "mquand",
   "license": "MIT",
@@ -27,7 +27,7 @@
       "activitybar": [
         {
           "id": "claude-session-manager-sidebar",
-          "title": "Claude Issues",
+          "title": "Claude Sessions",
           "icon": "resources/icon.svg"
         }
       ]
@@ -37,7 +37,7 @@
         {
           "type": "webview",
           "id": "claudeSessionManager.issuesView",
-          "name": "Claude Issue Sessions"
+          "name": "Claude Sessions"
         }
       ],
       "explorer": [
@@ -46,6 +46,14 @@
           "id": "claudeSessionManager.sessionExplorer",
           "name": "Claude Sessions",
           "when": "config.claudeSessionManager.showInExplorer"
+        }
+      ],
+      "scm": [
+        {
+          "type": "webview",
+          "id": "claudeSessionManager.sessionScm",
+          "name": "Claude Sessions",
+          "when": "config.claudeSessionManager.showInSourceControl"
         }
       ]
     },
@@ -67,6 +75,10 @@
       {
         "command": "claudeSessionManager.toggleExplorerView",
         "title": "Bật/Tắt hiển thị Claude Sessions trong thanh Explorer (File Tree)"
+      },
+      {
+        "command": "claudeSessionManager.toggleSourceControlView",
+        "title": "Bật/Tắt hiển thị Claude Sessions trong thanh Source Control (Git)"
       },
       {
         "command": "claudeSessionManager.statusMenu",
@@ -104,6 +116,11 @@
           "type": "boolean",
           "default": true,
           "description": "Hiển thị Claude Sessions trong thanh Explorer (File Tree) bên cạnh Open Editors, Timeline... / Show Claude Sessions in the Explorer view"
+        },
+        "claudeSessionManager.showInSourceControl": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hiển thị Claude Sessions trong thanh Source Control (Git) / Show Claude Sessions in the Source Control view"
         },
         "claudeSessionManager.workspaceRoot": {
           "type": "string",
