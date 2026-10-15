@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import { IssuesViewProvider } from './issuesViewProvider';
+import { ExtensionUpdater } from './updater';
 
 export function activate(context: vscode.ExtensionContext) {
-  const provider = new IssuesViewProvider(context.extensionUri);
+  const provider = new IssuesViewProvider(context.extensionUri, context);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
@@ -29,6 +30,12 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand('claudeSessionManager.checkForUpdates', () => {
+      ExtensionUpdater.checkForUpdates(context, true);
+    })
+  );
+
   // Lắng nghe cấu hình thay đổi để cập nhật tự động
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
@@ -37,6 +44,11 @@ export function activate(context: vscode.ExtensionContext) {
       }
     })
   );
+
+  // Tự động kiểm tra bản cập nhật mới trên GitHub sau 3.5 giây
+  setTimeout(() => {
+    ExtensionUpdater.checkForUpdates(context, false);
+  }, 3500);
 }
 
 export function deactivate() {}

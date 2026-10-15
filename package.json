@@ -50,6 +50,11 @@
       {
         "command": "claudeSessionManager.openSettings",
         "title": "Cấu hình đường dẫn lưu trữ"
+      },
+      {
+        "command": "claudeSessionManager.checkForUpdates",
+        "title": "Kiểm tra bản cập nhật mới (GitHub Releases)",
+        "icon": "$(cloud-download)"
       }
     ],
     "configuration": {

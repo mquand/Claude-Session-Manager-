@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ClaudeSession } from './types';
 import { SessionScanner } from './scanner';
+import { ExtensionUpdater } from './updater';
 
 export class IssuesViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'claudeSessionManager.issuesView';
@@ -10,7 +11,10 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
   private _debounceTimer?: NodeJS.Timeout;
   private _statusBarItem: vscode.StatusBarItem;
 
-  constructor(private readonly _extensionUri: vscode.Uri) {
+  constructor(
+    private readonly _extensionUri: vscode.Uri,
+    private readonly _context?: vscode.ExtensionContext
+  ) {
     this._statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     this._statusBarItem.command = 'claudeSessionManager.focusView';
     this._statusBarItem.text = '$(sparkle) Claude: Idle';
@@ -40,6 +44,12 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         }
         case 'openSettings': {
           await vscode.commands.executeCommand('workbench.action.openSettings', 'claudeSessionManager');
+          break;
+        }
+        case 'checkForUpdates': {
+          if (this._context) {
+            await ExtensionUpdater.checkForUpdates(this._context, true);
+          }
           break;
         }
         case 'openSession': {
@@ -555,7 +565,12 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     <button id="settingsBtn" class="icon-tool-btn" title="Cài đặt cấu hình (Settings)">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="3"></circle>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0-.33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
+    <button id="updateBtn" class="icon-tool-btn" title="Kiểm tra bản cập nhật mới (GitHub)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path>
       </svg>
     </button>
   </div>
@@ -602,6 +617,13 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     settingsBtn.addEventListener('click', () => {
       vscode.postMessage({ type: 'openSettings' });
     });
+
+    const updateBtn = document.getElementById('updateBtn');
+    if (updateBtn) {
+      updateBtn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'checkForUpdates' });
+      });
+    }
 
     document.querySelectorAll('.filter-btn').forEach(btn => {
       btn.addEventListener('click', () => {

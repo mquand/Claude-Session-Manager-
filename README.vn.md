@@ -69,6 +69,11 @@ Ngay cạnh thanh tìm kiếm được tích hợp 2 nút thao tác nhanh:
 - Tự động ghi nhớ trạng thái đóng/mở của người dùng qua các phiên làm việc.
 - Hỗ trợ cuộn chuột dọc mượt mà (`Smooth Scrolling`) với thanh cuộn được tối ưu thẩm mỹ.
 
+### 10. Tự động kiểm tra & Cập nhật từ GitHub Releases (Auto Updater)
+- Extension tự động kiểm tra phiên bản mới từ GitHub Releases mỗi khi khởi động VS Code (hoặc bấm nút **Tải xuống / Cập nhật** trên thanh công cụ).
+- Khi có phiên bản mới hơn trên GitHub, VS Code sẽ hiện thông báo kèm nút **[Cập nhật ngay]**.
+- Chỉ với **1 click**, extension sẽ tự tải file `.vsix` từ GitHub và tự động cài đè bản mới nhất vào máy của bạn, hoàn toàn không cần tải hay cài thủ công nữa!
+
 ---
 
 ## 🚀 CI/CD Tự động hóa tạo Release trên GitHub

@@ -69,6 +69,11 @@ Located right beside the search input:
 - Automatically persists your collapsed/expanded preferences across sessions.
 - Smooth native vertical scrolling with custom compact scrollbars.
 
+### 10. In-Extension Auto-Updater (GitHub Releases)
+- The extension automatically checks GitHub Releases for newer releases when VS Code launches (or when you click the **Update** toolbar icon).
+- When a newer release is published, a notification appears with a **[Update Now]** button.
+- With **a single click**, it automatically downloads the `.vsix` package and installs it directly into VS Code, eliminating manual downloads!
+
 ---
 
 ## 🚀 Automated GitHub Releases & CI/CD
