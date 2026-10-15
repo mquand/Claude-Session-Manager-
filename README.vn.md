@@ -51,17 +51,24 @@ Giao diện card được thiết kế hiện đại, tăng khoảng cách dòng
 - 🌿 **Git Branch & Repo**: Nhận diện đúng repo và nhánh git đang làm việc.
 - ✨ **Model AI**: `Opus 5.5`, `Sonnet 3.7`, `Haiku 3.5`...
 - 🗄️ **Tokens In / Out**: Ghi rõ ràng `in: 20.6M • out: 68K` (phân biệt rõ ràng token đầu vào và token đầu ra).
-- 💵 **Chi phí ($ USD)**: Tổng tiền API tiêu thụ (nếu có).
+- 💬 **Số lượt tương tác (Turns)**: Đếm chính xác số lần gửi prompt trao đổi trong phiên (1 prompt người dùng + 1 phản hồi = 1 turn).
+- 🆔 **Session ID rút gọn**: 8 ký tự đầu để tra cứu nhanh.
+
 ### 7. Thanh công cụ tiện ích: Nút Làm mới & Cài đặt nhanh
 Ngay cạnh thanh tìm kiếm được tích hợp 2 nút thao tác nhanh:
 - 🔄 **Nút Làm mới (Refresh)**: Quét lại toàn bộ danh sách sessions ngay lập tức với hiệu ứng xoay trực quan.
 - ⚙️ **Nút Cài đặt (Settings)**: 1 click mở ngay trang cấu hình extension trong VS Code Settings.
 
+### 8. Xoá phiên hội thoại trực tiếp & An toàn (Delete Conversation)
+- Di chuột qua bất kỳ card session nào sẽ xuất hiện nút **Thùng rác (Xoá)**.
+- Khi bấm xoá, một hộp thoại xác nhận an toàn (`Modal`) sẽ hiện ra để tránh xoá nhầm.
+- Xác nhận xoá sẽ dọn dẹp triệt để tệp `.jsonl` và thư mục dữ liệu cục bộ tương ứng.
+
 ---
 
 ## 🚀 CI/CD Tự động hóa tạo Release trên GitHub
 Dự án được tích hợp sẵn GitHub Actions Workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
-- Khi push commit lên nhánh `main` hoặc tạo Git Tag (ví dụ: `v0.1.0`), hệ thống sẽ:
+- Khi push commit lên nhánh `main` hoặc tạo Git Tag (ví dụ: `v0.1.1`), hệ thống sẽ:
   1. Tự động kiểm tra phiên bản trong `package.json`.
   2. Biên dịch TypeScript và đóng gói file `.vsix`.
   3. Tự động tạo một bản **GitHub Release** chính thức và đính kèm file `claude-session-manager-<version>.vsix` cho toàn bộ cộng đồng tải về!
@@ -74,7 +81,7 @@ Dự án được tích hợp sẵn GitHub Actions Workflow ([`.github/workflows
 
 Tương thích hoàn toàn với macOS, Linux, và Windows mà không cần cài Node.js hay build code:
 
-1. Tải file **`claude-session-manager-0.1.0.vsix`** từ Release hoặc thư mục gốc repository.
+1. Tải file **`claude-session-manager-0.1.1.vsix`** từ Release hoặc thư mục gốc repository.
 2. Mở VS Code, nhấn tổ hợp phím:
    - **macOS**: `Cmd + Shift + P`
    - **Windows / Linux**: `Ctrl + Shift + P`
@@ -82,7 +89,7 @@ Tương thích hoàn toàn với macOS, Linux, và Windows mà không cần cài
    ```text
    Extensions: Install from VSIX...
    ```
-4. Chọn file `claude-session-manager-0.1.0.vsix` và bấm **Install**.
+4. Chọn file `claude-session-manager-0.1.1.vsix` và bấm **Install**.
 5. Nhấn **Reload Window** (`Developer: Reload Window`).
 
 ---

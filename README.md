@@ -51,17 +51,24 @@ Every session card displays clean, distraction-free technical metrics with impro
 - 🌿 **Git Branch & Repo**: Real-time identification of target repository and branch.
 - ✨ **Model Identifier**: `Opus 5.5`, `Sonnet 3.7`, `Haiku 3.5`...
 - 🗄️ **Token Metrics**: Distinct `in: 20.6M • out: 68K` labels for input and output tokens.
-- 💵 **Cost Tracking**: Accurate calculated USD API expense per task.
+- 💬 **Conversation Turns**: Accurately counts user prompt round-trips.
+- 🆔 **Short Session ID**: First 8 characters for quick reference.
+
 ### 7. Integrated Toolbar: Quick Refresh & Settings
 Located right beside the search input:
 - 🔄 **Refresh Button**: Instantly rescans all active sessions and updates status in real-time with visual spinner feedback.
 - ⚙️ **Settings Button**: One-click jump to the extension's VS Code configuration settings.
 
+### 8. Safe One-Click Conversation Deletion
+- Hovering over any session card reveals a discrete **Trash / Delete** button.
+- Clicking delete prompts a native modal confirmation dialog to prevent accidental deletion.
+- Confirmed deletion completely removes the local `.jsonl` transcript and its associated directory.
+
 ---
 
 ## 🚀 Automated GitHub Releases & CI/CD
 This project includes a ready-to-use GitHub Actions workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
-- Pushing to the `main` branch or pushing a git tag (e.g. `v0.1.0`) automatically:
+- Pushing to the `main` branch or pushing a git tag (e.g. `v0.1.1`) automatically:
   1. Reads the version from `package.json`.
   2. Compiles TypeScript and packages the `.vsix` archive.
   3. Publishes an official **GitHub Release** with `claude-session-manager-<version>.vsix` attached for direct public download!
@@ -74,7 +81,7 @@ This project includes a ready-to-use GitHub Actions workflow ([`.github/workflow
 
 Compatible with macOS, Linux, and Windows without requiring Node.js:
 
-1. Download **`claude-session-manager-0.1.0.vsix`** from the latest GitHub Release or repository root.
+1. Download **`claude-session-manager-0.1.1.vsix`** from the latest GitHub Release or repository root.
 2. Open VS Code and press:
    - **macOS**: `Cmd + Shift + P`
    - **Windows / Linux**: `Ctrl + Shift + P`

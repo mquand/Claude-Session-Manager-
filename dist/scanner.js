@@ -7,6 +7,24 @@ const os = require("os");
 const readline = require("readline");
 class SessionScanner {
     static sessionCache = new Map();
+    static deleteSession(sessionId, filePath) {
+        try {
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+            const projectDir = path.dirname(filePath);
+            const subDir = path.join(projectDir, sessionId);
+            if (fs.existsSync(subDir)) {
+                fs.rmSync(subDir, { recursive: true, force: true });
+            }
+            this.sessionCache.delete(sessionId);
+            return true;
+        }
+        catch (err) {
+            console.error('Lỗi khi xoá session:', err);
+            return false;
+        }
+    }
     static resolveHomePath(p) {
         if (p.startsWith('~/') || p === '~') {
             return path.join(os.homedir(), p.slice(1));

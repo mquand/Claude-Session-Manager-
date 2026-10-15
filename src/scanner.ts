@@ -7,6 +7,24 @@ import { ClaudeSession, SessionStatus } from './types';
 export class SessionScanner {
   private static sessionCache = new Map<string, { session: ClaudeSession; mtimeMs: number }>();
 
+  public static deleteSession(sessionId: string, filePath: string): boolean {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      const projectDir = path.dirname(filePath);
+      const subDir = path.join(projectDir, sessionId);
+      if (fs.existsSync(subDir)) {
+        fs.rmSync(subDir, { recursive: true, force: true });
+      }
+      this.sessionCache.delete(sessionId);
+      return true;
+    } catch (err) {
+      console.error('Lỗi khi xoá session:', err);
+      return false;
+    }
+  }
+
   public static resolveHomePath(p: string): string {
     if (p.startsWith('~/') || p === '~') {
       return path.join(os.homedir(), p.slice(1));

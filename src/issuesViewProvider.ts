@@ -62,6 +62,24 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           }
           break;
         }
+        case 'deleteSession': {
+          const sessionTitle = data.title ? `"${data.title}"` : 'phiên hội thoại này';
+          const choice = await vscode.window.showWarningMessage(
+            `Bạn có chắc chắn muốn xoá ${sessionTitle}? Dữ liệu hội thoại sẽ bị xoá vĩnh viễn khỏi máy.`,
+            { modal: true },
+            'Xoá vĩnh viễn'
+          );
+          if (choice === 'Xoá vĩnh viễn') {
+            const success = SessionScanner.deleteSession(data.id, data.filePath);
+            if (success) {
+              vscode.window.showInformationMessage('Đã xoá phiên hội thoại thành công.');
+              await this.refresh();
+            } else {
+              vscode.window.showErrorMessage('Không thể xoá file hội thoại. Vui lòng kiểm tra quyền truy cập.');
+            }
+          }
+          break;
+        }
       }
     });
 
@@ -373,6 +391,32 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       min-width: 0;
     }
 
+    .card-delete-btn {
+      background: transparent;
+      border: none;
+      color: #64748b;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+      margin-left: 4px;
+    }
+
+    .session-card:hover .card-delete-btn {
+      opacity: 0.6;
+    }
+
+    .card-delete-btn:hover {
+      opacity: 1 !important;
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.15);
+    }
+
     .user-prompt {
       color: #94a3b8;
       font-size: 12px;
@@ -602,6 +646,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
               '<span class="repo-badge">' + escapeHtml(s.repo) + '</span>' +
               (s.issueId ? '<span class="issue-badge">' + escapeHtml(s.issueId) + '</span>' : '') +
               '<span class="title-text" title="' + escapeHtml(s.title) + '">' + escapeHtml(s.title) + '</span>' +
+              '<button class="card-delete-btn" title="Xoá phiên hội thoại" data-id="' + s.id + '" data-title="' + escapeHtml(s.title) + '" data-path="' + encodeURIComponent(s.filePath) + '" onclick="event.stopPropagation(); deleteSession(this.getAttribute(\'data-id\'), this.getAttribute(\'data-title\'), this.getAttribute(\'data-path\'))">' +
+                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                  '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
+                '</svg>' +
+              '</button>' +
             '</div>' +
             (s.lastUserPrompt ? '<div class="user-prompt">' + escapeHtml(s.lastUserPrompt) + '</div>' : '') +
             needAcceptAction +
@@ -627,6 +676,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
 
     function approveSession(id) {
       vscode.postMessage({ type: 'approve', id });
+    }
+
+    function deleteSession(id, title, encodedPath) {
+      const filePath = decodeURIComponent(encodedPath);
+      vscode.postMessage({ type: 'deleteSession', id, title, filePath });
     }
   </script>
 </body>
