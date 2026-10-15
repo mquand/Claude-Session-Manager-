@@ -598,9 +598,9 @@ class IssuesViewProvider {
     const updateBtn = document.getElementById('updateBtn');
     const filterBtns = document.querySelectorAll('.filter-btn');
 
-    // 2. Khôi phục State
+    // 2. Khôi phục State an toàn
     const savedState = vscode.getState() || {};
-    let allSessions = savedState.sessions || [];
+    let allSessions = Array.isArray(savedState.sessions) ? savedState.sessions : [];
     let currentFilter = savedState.currentFilter || 'today';
     let sectionState = savedState.sectionState || {
       need_accept: true,
@@ -636,8 +636,7 @@ class IssuesViewProvider {
       vscode.postMessage({ type: 'approve', id });
     }
 
-    function deleteSession(id, title, encodedPath) {
-      const filePath = decodeURIComponent(encodedPath);
+    function deleteSession(id, title, filePath) {
       vscode.postMessage({ type: 'deleteSession', id, title, filePath });
     }
 
@@ -654,8 +653,8 @@ class IssuesViewProvider {
       const cardStatusClass = 'status-' + s.status;
       const needAcceptAction = s.status === 'need_accept' 
         ? '<div class="card-actions">' +
-          '<button class="btn btn-secondary" onclick="event.stopPropagation(); openSession(\\'' + s.id + '\\')">Xem diff</button>' +
-          '<button class="btn" onclick="event.stopPropagation(); approveSession(\\'' + s.id + '\\')">Duyệt & Chạy</button>' +
+          '<button class="btn btn-secondary" data-action="diff" data-id="' + s.id + '">Xem diff</button>' +
+          '<button class="btn" data-action="approve" data-id="' + s.id + '">Duyệt & Chạy</button>' +
           '</div>'
         : '';
 
@@ -673,7 +672,7 @@ class IssuesViewProvider {
         '<span class="footer-meta-item short-id">' + escapeHtml(s.shortId) + '</span>' +
       '</div>';
 
-      return '<div class="session-card ' + cardStatusClass + '" onclick="openSession(\\'' + s.id + '\\')">' +
+      return '<div class="session-card ' + cardStatusClass + '" data-action="open" data-id="' + s.id + '">' +
         '<div class="card-header">' +
           '<span class="status-dot ' + dotClass + '"></span>' +
           '<div style="flex: 1; min-width: 0;">' +
@@ -681,7 +680,7 @@ class IssuesViewProvider {
               '<span class="repo-badge">' + escapeHtml(s.repo) + '</span>' +
               (s.issueId ? '<span class="issue-badge">' + escapeHtml(s.issueId) + '</span>' : '') +
               '<span class="title-text" title="' + escapeHtml(s.title) + '">' + escapeHtml(s.title) + '</span>' +
-              '<button class="card-delete-btn" title="Xoá phiên hội thoại" data-id="' + s.id + '" data-title="' + escapeHtml(s.title) + '" data-path="' + encodeURIComponent(s.filePath) + '" onclick="event.stopPropagation(); deleteSession(this.getAttribute(\'data-id\'), this.getAttribute(\'data-title\'), this.getAttribute(\'data-path\'))">' +
+              '<button class="card-delete-btn" title="Xoá phiên hội thoại" data-action="delete" data-id="' + s.id + '" data-title="' + escapeHtml(s.title) + '" data-path="' + encodeURIComponent(s.filePath || '') + '">' +
                 '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                   '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
                 '</svg>' +
@@ -734,7 +733,7 @@ class IssuesViewProvider {
 
         if (needAcceptList.length > 0) {
           const isOpen = query ? true : sectionState.need_accept;
-          html += '<div class="section-header" onclick="toggleSection(\'need_accept\')">' +
+          html += '<div class="section-header" data-action="toggle-section" data-section="need_accept">' +
             '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
               '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
             '</span>' +
@@ -748,7 +747,7 @@ class IssuesViewProvider {
 
         if (runningList.length > 0) {
           const isOpen = query ? true : sectionState.running;
-          html += '<div class="section-header" onclick="toggleSection(\'running\')">' +
+          html += '<div class="section-header" data-action="toggle-section" data-section="running">' +
             '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
               '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
             '</span>' +
@@ -762,7 +761,7 @@ class IssuesViewProvider {
 
         if (doneList.length > 0) {
           const isOpen = query ? true : sectionState.done;
-          html += '<div class="section-header" onclick="toggleSection(\'done\')">' +
+          html += '<div class="section-header" data-action="toggle-section" data-section="done">' +
             '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
               '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
             '</span>' +
@@ -834,10 +833,52 @@ class IssuesViewProvider {
       });
     });
 
+    // Event Delegation cho Content Container: xử lý click Card, Delete, Diff, Approve, Toggle Header
+    if (contentContainer) {
+      contentContainer.addEventListener('click', (e) => {
+        const actionEl = e.target.closest('[data-action]');
+        if (!actionEl) return;
+        const action = actionEl.getAttribute('data-action');
+        const id = actionEl.getAttribute('data-id');
+
+        if (action === 'toggle-section') {
+          const section = actionEl.getAttribute('data-section');
+          if (section) toggleSection(section);
+          return;
+        }
+
+        if (action === 'delete') {
+          e.stopPropagation();
+          const title = actionEl.getAttribute('data-title') || '';
+          const rawPath = actionEl.getAttribute('data-path') || '';
+          const filePath = decodeURIComponent(rawPath);
+          deleteSession(id, title, filePath);
+          return;
+        }
+
+        if (action === 'diff') {
+          e.stopPropagation();
+          if (id) openSession(id);
+          return;
+        }
+
+        if (action === 'approve') {
+          e.stopPropagation();
+          if (id) approveSession(id);
+          return;
+        }
+
+        if (action === 'open') {
+          if (id) openSession(id);
+          return;
+        }
+      });
+    }
+
     window.addEventListener('message', event => {
       const message = event.data;
       if (message.type === 'updateSessions') {
-        allSessions = message.sessions || [];
+        allSessions = Array.isArray(message.sessions) ? message.sessions : [];
         const state = vscode.getState() || {};
         state.sessions = allSessions;
         vscode.setState(state);
