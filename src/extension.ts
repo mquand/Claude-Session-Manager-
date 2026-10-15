@@ -36,6 +36,53 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('claudeSessionManager.openTab', (tab: string) => {
+      vscode.commands.executeCommand('claudeSessionManager.issuesView.focus');
+      provider.switchTab(tab);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('claudeSessionManager.statusMenu', async () => {
+      const items = [
+        {
+          label: '$(sync) Đang chạy & Cần review',
+          description: 'Xem các task đang chạy, chờ duyệt và vừa hoàn thành',
+          tab: 'active'
+        },
+        {
+          label: '$(calendar) Hôm nay',
+          description: 'Xem toàn bộ task phát sinh trong ngày hôm nay',
+          tab: 'today'
+        },
+        {
+          label: '$(list-unordered) Tất cả lịch sử',
+          description: 'Xem toàn bộ lịch sử các sessions',
+          tab: 'all'
+        },
+        {
+          label: '$(gear) Cài đặt cấu hình',
+          description: 'Mở thiết lập Claude Session Manager',
+          action: 'settings'
+        }
+      ];
+
+      const selected = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Chuyển nhanh tab hoặc thao tác'
+      });
+
+      if (!selected) return;
+
+      if (selected.action === 'settings') {
+        vscode.commands.executeCommand('workbench.action.openSettings', 'claudeSessionManager');
+      } else if (selected.tab) {
+        vscode.commands.executeCommand('claudeSessionManager.issuesView.focus');
+        provider.switchTab(selected.tab);
+      }
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand('claudeSessionManager.toggleExplorerView', async () => {
       const config = vscode.workspace.getConfiguration('claudeSessionManager');
       const current = config.get<boolean>('showInExplorer', false);

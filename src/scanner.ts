@@ -151,7 +151,7 @@ export class SessionScanner {
       const activeInfo = activeMap.get(item.sessionId);
       const cached = this.sessionCache.get(item.sessionId);
 
-      if (cached && cached.mtimeMs === item.mtimeMs && !activeInfo && cached.session.status === 'done') {
+      if (cached && cached.mtimeMs === item.mtimeMs && !activeInfo && cached.session.status === 'done' && cached.session.branch && cached.session.branch !== 'develop') {
         const diffMinutes = Math.floor((Date.now() - item.mtimeMs) / (60 * 1000));
         if (diffMinutes < 1) {
           cached.session.statusMessage = 'vừa xong';
@@ -206,6 +206,44 @@ export class SessionScanner {
     return rawModel.replace('claude-', '').replace('-5-5', ' 5.5');
   }
 
+  public static getGitInfoFromDir(dirPath: string): { branch: string; isWorktree: boolean; mainRepo?: string } | null {
+    try {
+      if (!dirPath || !fs.existsSync(dirPath)) return null;
+
+      const gitPath = path.join(dirPath, '.git');
+      if (!fs.existsSync(gitPath)) return null;
+
+      const stat = fs.statSync(gitPath);
+      if (stat.isFile()) {
+        // Git Worktree! (.git là file chứa gitdir)
+        const content = fs.readFileSync(gitPath, 'utf8');
+        const match = content.match(/gitdir:\s*(.*)/i);
+        if (match) {
+          const gitDir = match[1].trim();
+          const headPath = path.isAbsolute(gitDir) ? path.join(gitDir, 'HEAD') : path.resolve(dirPath, gitDir, 'HEAD');
+          let branch = '';
+          if (fs.existsSync(headPath)) {
+            const headContent = fs.readFileSync(headPath, 'utf8').trim();
+            branch = headContent.replace(/^ref:\s*refs\/heads\//, '').trim();
+          }
+          const parts = gitDir.split(path.sep);
+          const gitIdx = parts.indexOf('.git');
+          const mainRepo = gitIdx > 0 ? parts[gitIdx - 1] : undefined;
+          return { branch, isWorktree: true, mainRepo };
+        }
+      } else if (stat.isDirectory()) {
+        // Regular Git Repo! (.git là thư mục)
+        const headPath = path.join(gitPath, 'HEAD');
+        if (fs.existsSync(headPath)) {
+          const headContent = fs.readFileSync(headPath, 'utf8').trim();
+          const branch = headContent.replace(/^ref:\s*refs\/heads\//, '').trim();
+          return { branch, isWorktree: false };
+        }
+      }
+    } catch {}
+    return null;
+  }
+
   private static async fastParseSession(
     filePath: string,
     sessionId: string,
@@ -229,6 +267,7 @@ export class SessionScanner {
       let meaningfulLastPrompt = '';
       let branch = '';
       let repo = '';
+      let lastCwd = '';
       let entrypoint = 'claude-vscode';
       let lastTurnHadToolUse = false;
       let totalCostUSD = 0;
@@ -263,25 +302,17 @@ export class SessionScanner {
           }
 
           if (item.cwd) {
-            const base = path.basename(item.cwd);
-            // Hỗ trợ Git Worktree: Trong worktree, .git là 1 file chứa "gitdir: .../<main-repo>/.git/worktrees/..."
-            try {
-              const gitPath = path.join(item.cwd, '.git');
-              if (fs.existsSync(gitPath) && fs.statSync(gitPath).isFile()) {
-                isWorktree = true;
-                const gitContent = fs.readFileSync(gitPath, 'utf8');
-                const match = gitContent.match(/gitdir:\s*(.*)/i);
-                if (match) {
-                  const gitDir = match[1].trim();
-                  const parts = gitDir.split(path.sep);
-                  const gitIdx = parts.indexOf('.git');
-                  if (gitIdx > 0) {
-                    repo = parts[gitIdx - 1];
-                  }
-                }
+            lastCwd = item.cwd;
+            const gitInfo = this.getGitInfoFromDir(item.cwd);
+            if (gitInfo) {
+              if (gitInfo.branch && gitInfo.branch !== 'HEAD') {
+                branch = gitInfo.branch;
               }
-            } catch {}
+              if (gitInfo.isWorktree) isWorktree = true;
+              if (gitInfo.mainRepo) repo = gitInfo.mainRepo;
+            }
 
+            const base = path.basename(item.cwd);
             if (!repo) {
               if (base && base !== 'workspace') {
                 repo = base;
@@ -346,6 +377,15 @@ export class SessionScanner {
               for (const part of content) {
                 if (part.type === 'tool_use') {
                   hasTool = true;
+                  if (part.input) {
+                    const candidatePath = part.input.path || part.input.file_path || part.input.filePath;
+                    if (typeof candidatePath === 'string' && candidatePath) {
+                      const match = candidatePath.match(/(?:workspace|Documents)[/\\]([^/\\]+)/);
+                      if (match && match[1] && match[1] !== 'workspace' && !match[1].startsWith('.')) {
+                        repo = match[1];
+                      }
+                    }
+                  }
                 }
               }
               lastTurnHadToolUse = hasTool;
@@ -357,7 +397,14 @@ export class SessionScanner {
       }
 
       if (!repo) {
-        repo = 'app-backend';
+        const checkText = (title + ' ' + (meaningfulFirstPrompt || '')).toLowerCase();
+        if (checkText.includes('app-frontend') || checkText.includes('ssr')) {
+          repo = 'app-frontend';
+        } else if (checkText.includes('claude-session') || checkText.includes('extension')) {
+          repo = 'claude-session-manager';
+        } else {
+          repo = 'app-backend';
+        }
       }
 
       // Title tinh gọn: Lấy từ aiTitle hoặc prompt đầu tiên
@@ -416,6 +463,36 @@ export class SessionScanner {
         }
       }
 
+      // Nếu branch chưa tìm thấy hoặc là HEAD, kiểm tra thư mục git tương ứng
+      if (!branch || branch === 'HEAD') {
+        const checkDirs: string[] = [];
+        if (lastCwd) {
+          if (repo && repo !== path.basename(lastCwd)) {
+            checkDirs.push(path.join(lastCwd, repo));
+          }
+          checkDirs.push(lastCwd);
+        }
+        // Kiểm tra thêm trong ~/Documents/workspace/<repo>
+        const homeWorkspace = path.join(os.homedir(), 'Documents', 'workspace');
+        if (repo) {
+          checkDirs.push(path.join(homeWorkspace, repo));
+        }
+        checkDirs.push(homeWorkspace);
+
+        for (const dir of checkDirs) {
+          const gitInfo = this.getGitInfoFromDir(dir);
+          if (gitInfo && gitInfo.branch && gitInfo.branch !== 'HEAD') {
+            branch = gitInfo.branch;
+            if (gitInfo.isWorktree) isWorktree = true;
+            break;
+          }
+        }
+      }
+
+      if (branch === 'HEAD') {
+        branch = '';
+      }
+
       // Prompt gần nhất
       const lastUserPrompt = meaningfulLastPrompt ? meaningfulLastPrompt.split('\n')[0] : undefined;
 
@@ -439,7 +516,7 @@ export class SessionScanner {
         issueId,
         title,
         repo,
-        branch: branch || 'develop',
+        branch: branch || '',
         isWorktree,
         status,
         statusMessage,
