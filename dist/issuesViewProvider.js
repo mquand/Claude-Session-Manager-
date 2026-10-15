@@ -217,12 +217,12 @@ class IssuesViewProvider {
     .session-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 6px;
-      padding: 9px 11px;
-      margin-bottom: 7px;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
       cursor: pointer;
       transition: all 0.15s ease;
-      border-left: 3.5px solid var(--card-border);
+      border-left: 4px solid var(--card-border);
     }
 
     .session-card.status-need_accept {
@@ -245,14 +245,14 @@ class IssuesViewProvider {
     .card-header {
       display: flex;
       align-items: flex-start;
-      gap: 8px;
+      gap: 10px;
     }
 
     .status-dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      margin-top: 4px;
+      margin-top: 6px;
       flex-shrink: 0;
       display: inline-block;
     }
@@ -272,9 +272,10 @@ class IssuesViewProvider {
     .meta-row {
       display: flex;
       align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      margin-bottom: 3px;
+      gap: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+      margin-bottom: 8px;
       overflow: hidden;
       white-space: nowrap;
     }
@@ -282,8 +283,8 @@ class IssuesViewProvider {
     .repo-badge {
       background: #252b38;
       color: #93c5fd;
-      padding: 1.5px 5px;
-      border-radius: 3px;
+      padding: 2px 7px;
+      border-radius: 4px;
       font-size: 11px;
       font-weight: 600;
       font-family: monospace;
@@ -293,9 +294,9 @@ class IssuesViewProvider {
     .issue-badge {
       background: #1e3a5f;
       color: #60a5fa;
-      padding: 1.5px 5px;
-      border-radius: 3px;
-      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11.5px;
       font-weight: 700;
       flex-shrink: 0;
     }
@@ -312,42 +313,34 @@ class IssuesViewProvider {
 
     .user-prompt {
       color: #94a3b8;
-      font-size: 11px;
-      margin: 3px 0;
+      font-size: 12px;
+      margin: 8px 0 10px 0;
+      line-height: 1.5;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    .assistant-response {
-      background: rgba(0, 0, 0, 0.25);
-      border-radius: 4px;
-      padding: 5px 8px;
-      margin-top: 5px;
-      font-size: 11.5px;
-      color: #cbd5e1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      border-left: 2px solid #3b82f6;
-    }
-
-    /* Clean Footer - Không rườm rà icon rác */
+    /* Clean Footer với khoảng cách thoáng đãng */
     .footer-meta-row {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 10px;
-      font-size: 11px;
+      gap: 8px;
+      font-size: 11.5px;
       color: #7d8b9f;
-      margin-top: 6px;
-      line-height: 1;
+      margin-top: 10px;
+      line-height: 1.4;
     }
 
     .footer-meta-item {
       display: inline-flex;
       align-items: center;
       gap: 3px;
+    }
+
+    .footer-meta-item.token {
+      color: #94a3b8;
     }
 
     .footer-meta-item.cost {
@@ -496,18 +489,18 @@ class IssuesViewProvider {
           '</div>'
         : '';
 
-      // Footer clean, bỏ các emoji dư thừa, căn chỉnh gọn gàng chuyên nghiệp
+      // Footer clean: bỏ VS Code thừa, ghi rõ in: ... • out: ..., khoảng cách thoáng
       const footerMetaRow = '<div class="footer-meta-row">' +
         '<span class="footer-meta-item">' + escapeHtml(s.statusMessage) + '</span>' +
-        '<span>•</span>' +
-        '<span class="footer-meta-item">' + escapeHtml(s.source) + '</span>' +
-        '<span>•</span>' +
+        '<span style="opacity: 0.35;">•</span>' +
         '<span class="footer-meta-item">' + escapeHtml(s.modelName) + '</span>' +
-        '<span>•</span>' +
-        '<span class="footer-meta-item">' + escapeHtml(s.inputTokensFormatted) + ' · ' + escapeHtml(s.outputTokensFormatted) + '</span>' +
-        (s.costUSD ? '<span>•</span><span class="footer-meta-item cost">' + escapeHtml(s.costUSD) + '</span>' : '') +
-        '<span>•</span>' +
-        '<span class="footer-meta-item">' + s.turnCount + ' turns</span>' +
+        '<span style="opacity: 0.35;">•</span>' +
+        '<span class="footer-meta-item token">in: ' + escapeHtml(s.inputTokensFormatted) + '</span>' +
+        '<span style="opacity: 0.35;">•</span>' +
+        '<span class="footer-meta-item token">out: ' + escapeHtml(s.outputTokensFormatted) + '</span>' +
+        (s.costUSD ? '<span style="opacity: 0.35;">•</span><span class="footer-meta-item cost">' + escapeHtml(s.costUSD) + '</span>' : '') +
+        '<span style="opacity: 0.35;">•</span>' +
+        '<span class="footer-meta-item" title="Số lượt trao đổi hội thoại">' + s.turnCount + ' turns</span>' +
         '<span class="footer-meta-item short-id">' + escapeHtml(s.shortId) + '</span>' +
       '</div>';
 

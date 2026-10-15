@@ -23,35 +23,37 @@ When working extensively with Claude Code (or autonomous AI agent workflows):
 
 ## ✨ Key Features
 
-### 1. Real-Time OS Process & State Tracking
-- 🔵 **Running**: Tracked directly via OS-level Process ID (PID) liveness. The session only shows as running when the Claude process is actively alive in system memory.
-- 🟡 **Need Accept**: Instantly alerts you when Claude is paused waiting for your permission (dangerous shell commands, file modifications, or plan approvals).
-- 🟢 **Done**: Tasks that have completed their turn.
+### 1. Accurate Real-Time OS & Runtime Tracking
+- 🔵 **Running**: Tracked by OS-level Process ID (PID) combined with Claude Code runtime state. Only marked as Running when Claude is actively thinking, generating, or running commands (`running`/`busy`). Once Claude finishes its answer and returns to `idle`, the session automatically transitions to **Done**.
+- 🟡 **Need Accept**: Instantly alerts you when Claude is paused waiting for your approval (executing terminal commands or applying file changes).
+- 🟢 **Done**: Completed tasks or sessions whose processes have terminated, displaying precise relative timestamps (`just now`, `5 mins ago`...).
 
-### 2. Dual Workflow Modes
+### 2. 100% Compatible with All Login Methods & Plans
+The extension directly analyzes local machine runtime data and transcripts at `~/.claude/`:
+- **Web Login (`claude login`)**: Full support for **Claude Pro**, **Claude Team**, and **Claude Enterprise** accounts authenticated via browser OAuth.
+- **API Key Login (`ANTHROPIC_API_KEY`)**: Full support for developer tokens and pay-as-you-go usage.
+- Independent of subscription plans or authentication methods.
+
+### 3. Dual Workflow Modes
 - **Ticket / Issue-Driven Workflow**: Automatically parses issue tags matching `#<number>` (e.g., `#100`, `#7152`, `#5433`), displays a dedicated highlighted badge, and cleans up redundant text from session titles.
-- **Free-Form Chat Workflow**: When no issue number is present, it intelligently extracts your initial query as the concise session title without placeholder artifacts.
+- **Free-Form Chat Workflow**: When no issue number is present, it intelligently extracts your initial query as the concise session title without any placeholder artifacts or `#0`.
 
-### 3. Dual Notification Access Points
+### 4. Dual Notification Access Points
 - **Activity Bar (Sidebar)**: Custom Claude icon with a **real-time numeric badge** indicating active tasks requiring approval.
 - **Status Bar (Bottom Right)**: Live indicator (e.g., `🔔 Claude: 1 Need Accept` or `✨ Claude: 5 Tasks`) that focuses the panel with a single click.
 
-### 4. 1-Click Instant Session Switch
+### 5. 1-Click Instant Session Switch
 Click on any session card to immediately open and focus the corresponding conversation tab in Claude Code.
 
-### 5. Clean, Single-Line Meta Layout (Zero Clutter)
-Every session card displays rich, distraction-free technical metrics neatly truncated on single lines:
-- 🕒 **Relative Timestamp**: `3 minutes ago`, `2 hours ago`, `5 days ago`...
-- 💻 **Environment Source**: `VS Code` or `Terminal`
-- 🌿 **Git Branch**: Identifies the working git branch per session.
+### 6. Clear Technical Stats & Spacious Clean Layout
+Every session card displays clean, distraction-free technical metrics with improved line height and comfortable spacing:
+- 🕒 **Relative Timestamp**: `just now`, `3 mins ago`, `2 hours ago`...
+- 🌿 **Git Branch & Repo**: Real-time identification of target repository and branch.
 - ✨ **Model Identifier**: `Opus 5.5`, `Sonnet 3.7`, `Haiku 3.5`...
-- 🗄️ **Token Metrics**: Compact human-readable token counts (`1.5B · 2.4M out`).
+- 🗄️ **Token Metrics**: Distinct `in: 20.6M • out: 68K` labels for input and output tokens.
 - 💵 **Cost Tracking**: Accurate calculated USD API expense per task.
-- 💬 **Turns Count & Short Session ID** (first 8 characters).
-
-### 6. Sub-millisecond Load Times & Auto Cache Purge
-- Employs in-memory caching and 64KB chunked file streaming for instantaneous 0ms panel rendering.
-- Automatically purges deleted session files to keep your dashboard clean.
+- 💬 **Conversation Turns**: Accurately counts user prompt round-trips.
+- 🆔 **Short Session ID**: First 8 characters for quick reference.
 
 ---
 

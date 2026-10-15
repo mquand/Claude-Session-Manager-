@@ -128,7 +128,17 @@ export class SessionScanner {
       const activeInfo = activeMap.get(item.sessionId);
       const cached = this.sessionCache.get(item.sessionId);
 
-      if (cached && cached.mtimeMs === item.mtimeMs && !activeInfo) {
+      if (cached && cached.mtimeMs === item.mtimeMs && !activeInfo && cached.session.status === 'done') {
+        const diffMinutes = Math.floor((Date.now() - item.mtimeMs) / (60 * 1000));
+        if (diffMinutes < 1) {
+          cached.session.statusMessage = 'vừa xong';
+        } else if (diffMinutes < 60) {
+          cached.session.statusMessage = `${diffMinutes} phút trước`;
+        } else if (diffMinutes < 1440) {
+          cached.session.statusMessage = `${Math.floor(diffMinutes / 60)} giờ trước`;
+        } else {
+          cached.session.statusMessage = `${Math.floor(diffMinutes / 1440)} ngày trước`;
+        }
         sessions.push(cached.session);
         continue;
       }
@@ -262,9 +272,11 @@ export class SessionScanner {
 
             const cleaned = this.cleanPromptText(fullText);
             if (cleaned) {
+              turnCount++;
               if (!meaningfulFirstPrompt) meaningfulFirstPrompt = cleaned;
               meaningfulLastPrompt = cleaned;
             }
+            lastTurnHadToolUse = false;
           } else if (item.type === 'last-prompt' && item.lastPrompt) {
             const cleaned = this.cleanPromptText(item.lastPrompt);
             if (cleaned) {
@@ -274,7 +286,6 @@ export class SessionScanner {
           }
 
           if (item.type === 'assistant' && item.message?.content) {
-            turnCount++;
             if (item.message.model) {
               modelName = this.formatModelName(item.message.model);
             }
@@ -293,6 +304,8 @@ export class SessionScanner {
                 }
               }
               lastTurnHadToolUse = hasTool;
+            } else {
+              lastTurnHadToolUse = false;
             }
           }
         } catch {}
@@ -317,23 +330,39 @@ export class SessionScanner {
         title = title.replace(/#\d+\s*/g, '').trim();
       }
 
-      const diffMinutes = Math.max(1, Math.floor((Date.now() - mtimeMs) / (60 * 1000)));
+      const diffMinutes = Math.floor((Date.now() - mtimeMs) / (60 * 1000));
       
       let status: SessionStatus = 'done';
       let statusMessage = '';
 
-      // TIÊU CHÍ: Chỉ coi là ĐANG CHẠY / CHỜ DUYỆT khi PID thực tế trên OS đang sống
+      // TIÊU CHÍ ĐANG CHẠY / CHỜ DUYỆT:
+      // - Chỉ coi là ĐANG CHẠY khi process OS còn sống VÀ trạng thái là 'running'/'busy'
+      // - Coi là CHỜ DUYỆT khi lượt trước đó gọi tool và đang đợi phản hồi
+      // - Khi process OS ở trạng thái 'idle' (đã hoàn thành câu trả lời) -> coi là 'done' (Đã xong)
       if (activeInfo) {
         if (lastTurnHadToolUse) {
           status = 'need_accept';
-          statusMessage = `chờ duyệt`;
-        } else {
+          statusMessage = 'chờ duyệt';
+        } else if (activeInfo.status === 'running' || activeInfo.status === 'busy' || activeInfo.status === 'executing') {
           status = 'running';
-          statusMessage = `đang chạy`;
+          statusMessage = 'đang chạy';
+        } else {
+          status = 'done';
+          if (diffMinutes < 1) {
+            statusMessage = 'vừa xong';
+          } else if (diffMinutes < 60) {
+            statusMessage = `${diffMinutes} phút trước`;
+          } else if (diffMinutes < 1440) {
+            statusMessage = `${Math.floor(diffMinutes / 60)} giờ trước`;
+          } else {
+            statusMessage = `${Math.floor(diffMinutes / 1440)} ngày trước`;
+          }
         }
       } else {
         status = 'done';
-        if (diffMinutes < 60) {
+        if (diffMinutes < 1) {
+          statusMessage = 'vừa xong';
+        } else if (diffMinutes < 60) {
           statusMessage = `${diffMinutes} phút trước`;
         } else if (diffMinutes < 1440) {
           statusMessage = `${Math.floor(diffMinutes / 60)} giờ trước`;
@@ -342,12 +371,12 @@ export class SessionScanner {
         }
       }
 
-      // Prompt gần nhất: bỏ prefix ">" cho sạch
+      // Prompt gần nhất
       const lastUserPrompt = meaningfulLastPrompt ? meaningfulLastPrompt.split('\n')[0] : undefined;
 
       const source: 'VS Code' | 'Terminal' = entrypoint === 'cli' ? 'Terminal' : 'VS Code';
-      const inputTokensFormatted = inputTokens > 0 ? this.formatTokens(inputTokens) : '1.2M';
-      const outputTokensFormatted = outputTokens > 0 ? this.formatTokens(outputTokens) + ' ra' : '45K ra';
+      const inputTokensFormatted = inputTokens > 0 ? this.formatTokens(inputTokens) : '0';
+      const outputTokensFormatted = outputTokens > 0 ? this.formatTokens(outputTokens) : '0';
       const costUSD = totalCostUSD > 0 ? `$${totalCostUSD.toFixed(2)}` : undefined;
       const shortId = sessionId.slice(0, 8);
 
@@ -360,7 +389,7 @@ export class SessionScanner {
         status,
         statusMessage,
         lastUserPrompt,
-        lastAssistantResponse: undefined, // Loại bỏ hẳn box phản hồi to đùng làm rối mắt
+        lastAssistantResponse: undefined,
         updatedAt: mtimeMs,
         filePath,
         source,

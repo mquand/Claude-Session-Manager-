@@ -23,35 +23,37 @@ Khi sử dụng Claude Code (hoặc các AI agent tự động) cường độ c
 
 ## ✨ Tính năng nổi bật
 
-### 1. Giám sát trạng thái theo thời gian thực (Real-time OS Monitoring)
-- 🔵 **ĐANG CHẠY (`Running`)**: Nhận diện chính xác theo tiến trình hệ điều hành (Process ID - PID). Chỉ khi nào tiến trình Claude đang thực thi thật sự trên OS thì mới xếp vào Đang chạy.
-- 🟡 **CHỜ DUYỆT (`Need Accept`)**: Phát hiện ngay khoảnh khắc Claude dừng lại để xin phép bạn thực thi lệnh terminal nguy hiểm hoặc apply code diff.
-- 🟢 **ĐÃ HOÀN THÀNH (`Done`)**: Các phiên làm việc đã hoàn tất turn.
+### 1. Giám sát trạng thái chính xác theo Runtime OS
+- 🔵 **ĐANG CHẠY (`Running`)**: Nhận diện theo Process ID (PID) và trạng thái runtime của Claude Code. Khi Claude đang thực sự suy nghĩ, sinh mã hoặc chạy script (`running`/`busy`) thì mới hiển thị Đang chạy. Khi Claude đã trả lời xong và chuyển sang trạng thái chờ lệnh (`idle`), extension sẽ tự động cập nhật sang **Đã hoàn thành**.
+- 🟡 **CHỜ DUYỆT (`Need Accept`)**: Phát hiện ngay khoảnh khắc Claude dừng lại để xin phép bạn thực thi lệnh terminal nguy hiểm hoặc apply file code.
+- 🟢 **ĐÃ HOÀN THÀNH (`Done`)**: Các phiên làm việc đã hoàn tất turn hoặc tiến trình đã kết thúc, hiển thị thời gian tương đối (`vừa xong`, `5 phút trước`...).
 
-### 2. Tự động tương thích 2 chế độ làm việc
-- **Làm việc tự do (Không dùng Issue)**: Nếu bạn chỉ chat fix bug, test code bình thường (ví dụ: `fix auth bug`, `tets`, `xoá file cũ`), extension tự động lấy câu hỏi đầu tiên làm tiêu đề, không hiện rác `#0`.
-- **Làm việc theo Issue / Ticket**: Tự động nhận diện cú pháp `#<số>` (ví dụ: `#100`, `#7152`, `#5433`) để gắn **Badge Issue màu xanh** nổi bật và làm sạch các đoạn text trùng lặp ở tiêu đề.
+### 2. Tương thích 100% mọi phương thức đăng nhập & Gói cước
+Extension hoạt động bằng cách đọc trực tiếp dữ liệu runtime và nhật ký local tại `~/.claude/`:
+- **Đăng nhập Web (`claude login`)**: Hỗ trợ đầy đủ tài khoản **Claude Pro**, **Claude Team**, **Claude Enterprise** qua trình duyệt.
+- **Đăng nhập API (`ANTHROPIC_API_KEY`)**: Hỗ trợ trả phí theo token qua Anthropic Console.
+- Bất kể bạn dùng gói nào hay đăng nhập bằng cách nào, extension đều nhận diện trơn tru.
 
-### 3. Thông báo đa điểm tiện lợi (2 vị trí)
-- **Thanh Activity Bar (Sidebar bên trái)**: Icon **Claude Issues** kèm **Badge số màu cam/xanh** nhảy realtime khi có task cần duyệt lệnh.
+### 3. Tự động tương thích 2 chế độ làm việc
+- **Làm việc tự do (Không dùng Issue)**: Nếu bạn chỉ chat fix bug, trao đổi thông thường, extension tự động lấy câu hỏi đầu tiên làm tiêu đề, tuyệt đối **không hiện rác `#0`**.
+- **Làm việc theo Issue / Ticket**: Tự động nhận diện cú pháp `#<số>` (ví dụ: `#100`, `#7152`, `#5433`) để gắn **Badge Issue màu xanh** nổi bật và làm sạch các đoạn text trùng lặp.
+
+### 4. Thông báo đa điểm tiện lợi (2 vị trí)
+- **Thanh Activity Bar (Sidebar bên trái)**: Icon Claude đặc trưng kèm **Badge số màu cam/xanh** nhảy realtime khi có task cần duyệt lệnh.
 - **Thanh Status Bar (Dưới đáy màn hình)**: Hiển thị nhanh số task đang xử lý (ví dụ: `🔔 Claude: 1 Chờ duyệt` hoặc `✨ Claude: 5 Tasks`), 1 click mở ngay panel.
 
-### 4. 1-Click mở đúng cuộc trò chuyện (Instant Session Jump)
+### 5. 1-Click mở đúng cuộc trò chuyện (Instant Session Jump)
 Click vào bất kỳ card nào trên giao diện ➔ VS Code sẽ kích hoạt trực tiếp Claude Code chuyển thẳng đến đúng session đó ngay lập tức.
 
-### 5. Thống kê chi tiết & Thiết kế Clean, phẳng (No Bloat)
-Mỗi card hiển thị đầy đủ thông số kỹ thuật được tối ưu trên 1 dòng gọn gàng, không emoji rườm rà:
-- 🕒 **Thời gian tương đối**: `3 phút trước`, `2 giờ trước`, `5 ngày trước`...
-- 💻 **Môi trường**: `<> VS Code` hoặc `Terminal`
-- 🌿 **Git Branch**: Nhận diện đúng nhánh git đang làm việc
+### 6. Thống kê kỹ thuật rõ ràng & Layout thoáng đãng
+Giao diện card được thiết kế hiện đại, tăng khoảng cách dòng, dễ đọc cho người quản lý nhiều session:
+- 🕒 **Thời gian tương đối**: `vừa xong`, `3 phút trước`, `2 giờ trước`...
+- 🌿 **Git Branch & Repo**: Nhận diện đúng repo và nhánh git đang làm việc.
 - ✨ **Model AI**: `Opus 5.5`, `Sonnet 3.7`, `Haiku 3.5`...
-- 🗄️ **Tokens In / Out**: Quy đổi chuẩn `K`, `M`, `B` (vd: `1.5B · 2.4M ra`)
-- 💵 **Chi phí ($ USD)**: Tổng tiền API tiêu thụ của session
-- 💬 **Số lượt tương tác (Turns) & Session ID rút gọn** (8 ký tự)
-
-### 6. Tốc độ mở 0ms & Tự động dọn dẹp Cache
-- Sử dụng cơ chế In-Memory Cache và bộ đệm 64KB stream, mở extension là render ngay lập tức.
-- Tự động phát hiện và loại bỏ các session mà file đã bị xóa trên máy, không lưu rác.
+- 🗄️ **Tokens In / Out**: Ghi rõ ràng `in: 20.6M • out: 68K` (phân biệt rõ ràng token đầu vào và token đầu ra).
+- 💵 **Chi phí ($ USD)**: Tổng tiền API tiêu thụ (nếu có).
+- 💬 **Số lượt tương tác (Turns)**: Đếm chính xác số lần gửi prompt trao đổi trong phiên (1 prompt người dùng + 1 phản hồi = 1 turn).
+- 🆔 **Session ID rút gọn**: 8 ký tự đầu để tra cứu nhanh.
 
 ---
 
