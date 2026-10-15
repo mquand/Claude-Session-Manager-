@@ -2,7 +2,7 @@
   "name": "claude-session-manager",
   "displayName": "Claude Session & Issue Manager",
   "description": "Quản lý các issue, session, và trạng thái hội thoại của Claude trực tiếp trên VS Code",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "publisher": "mquand",
   "author": "mquand",
   "license": "MIT",
@@ -104,6 +104,16 @@
           "type": "boolean",
           "default": false,
           "description": "Hiển thị Claude Sessions trong thanh Explorer (File Tree) bên cạnh Open Editors, Timeline... / Show Claude Sessions in the Explorer view"
+        },
+        "claudeSessionManager.workspaceRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Đường dẫn thư mục chứa các dự án/repository (Workspace root folder). Để trống để tự động nhận diện theo thư mục đang mở trong VS Code."
+        },
+        "claudeSessionManager.defaultRepo": {
+          "type": "string",
+          "default": "",
+          "description": "Tên repository mặc định khi phiên làm việc không xác định được dự án cụ thể."
         }
       }
     }

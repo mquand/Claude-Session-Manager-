@@ -92,7 +92,7 @@ class SessionScanner {
         catch { }
         return activeMap;
     }
-    static async scanSessions(customPath) {
+    static async scanSessions(customPath, options) {
         const defaultClaudeProjects = customPath ? this.resolveHomePath(customPath) : path.join(os.homedir(), '.claude', 'projects');
         if (!fs.existsSync(defaultClaudeProjects)) {
             return [];
@@ -143,7 +143,13 @@ class SessionScanner {
         for (const item of topCandidates) {
             const activeInfo = activeMap.get(item.sessionId);
             const cached = this.sessionCache.get(item.sessionId);
-            if (cached && cached.mtimeMs === item.mtimeMs && !activeInfo && cached.session.status === 'done' && cached.session.branch && cached.session.branch !== 'develop') {
+            if (cached &&
+                cached.mtimeMs === item.mtimeMs &&
+                !activeInfo &&
+                cached.session.status === 'done' &&
+                cached.session.branch &&
+                cached.session.branch !== 'develop' &&
+                cached.session.totalTokens !== undefined) {
                 const diffMinutes = Math.floor((Date.now() - item.mtimeMs) / (60 * 1000));
                 if (diffMinutes < 1) {
                     cached.session.statusMessage = 'vừa xong';
@@ -160,7 +166,7 @@ class SessionScanner {
                 sessions.push(cached.session);
                 continue;
             }
-            const parsed = await this.fastParseSession(item.filePath, item.sessionId, item.mtimeMs, item.dirPath, activeInfo);
+            const parsed = await this.fastParseSession(item.filePath, item.sessionId, item.mtimeMs, item.dirPath, activeInfo, options);
             if (parsed) {
                 this.sessionCache.set(item.sessionId, { session: parsed, mtimeMs: item.mtimeMs });
                 sessions.push(parsed);
@@ -242,7 +248,7 @@ class SessionScanner {
         catch { }
         return null;
     }
-    static async fastParseSession(filePath, sessionId, mtimeMs, projectDir, activeInfo) {
+    static async fastParseSession(filePath, sessionId, mtimeMs, projectDir, activeInfo, options) {
         try {
             let title = '';
             const customTitlePath = path.join(projectDir, sessionId, 'custom-title.json');
@@ -289,6 +295,14 @@ class SessionScanner {
                     }
                     if (item.cwd) {
                         lastCwd = item.cwd;
+                        if (options?.workspaceFolders) {
+                            for (const wf of options.workspaceFolders) {
+                                if (item.cwd === wf || item.cwd.startsWith(wf + path.sep)) {
+                                    repo = path.basename(wf);
+                                    break;
+                                }
+                            }
+                        }
                         const gitInfo = this.getGitInfoFromDir(item.cwd);
                         if (gitInfo) {
                             if (gitInfo.branch && gitInfo.branch !== 'HEAD') {
@@ -299,12 +313,10 @@ class SessionScanner {
                             if (gitInfo.mainRepo)
                                 repo = gitInfo.mainRepo;
                         }
-                        const base = path.basename(item.cwd);
                         if (!repo) {
-                            if (base && base !== 'workspace') {
-                                repo = base;
-                            }
-                            else if (!repo && base) {
+                            const base = path.basename(item.cwd);
+                            const genericDirs = ['workspace', 'documents', 'projects', 'home', 'users'];
+                            if (base && !genericDirs.includes(base.toLowerCase())) {
                                 repo = base;
                             }
                         }
@@ -367,11 +379,32 @@ class SessionScanner {
                                 if (part.type === 'tool_use') {
                                     hasTool = true;
                                     if (part.input) {
-                                        const candidatePath = part.input.path || part.input.file_path || part.input.filePath;
+                                        const candidatePath = part.input.path || part.input.file_path || part.input.filePath || part.input.cwd;
                                         if (typeof candidatePath === 'string' && candidatePath) {
-                                            const match = candidatePath.match(/(?:workspace|Documents)[/\\]([^/\\]+)/);
-                                            if (match && match[1] && match[1] !== 'workspace' && !match[1].startsWith('.')) {
-                                                repo = match[1];
+                                            if (options?.workspaceFolders) {
+                                                for (const wf of options.workspaceFolders) {
+                                                    const wfName = path.basename(wf);
+                                                    if (candidatePath.includes(wf) || candidatePath.includes(path.sep + wfName + path.sep)) {
+                                                        repo = wfName;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            if (!repo && lastCwd && fs.existsSync(lastCwd)) {
+                                                try {
+                                                    const entries = fs.readdirSync(lastCwd, { withFileTypes: true });
+                                                    for (const entry of entries) {
+                                                        if (entry.isDirectory() && !entry.name.startsWith('.')) {
+                                                            if (candidatePath.includes(entry.name)) {
+                                                                if (fs.existsSync(path.join(lastCwd, entry.name, '.git'))) {
+                                                                    repo = entry.name;
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                catch { }
                                             }
                                         }
                                     }
@@ -387,15 +420,45 @@ class SessionScanner {
                 catch { }
             }
             if (!repo) {
-                const checkText = (title + ' ' + (meaningfulFirstPrompt || '')).toLowerCase();
-                if (checkText.includes('app-frontend') || checkText.includes('ssr')) {
-                    repo = 'app-frontend';
+                const searchContext = (title + ' ' + (meaningfulFirstPrompt || '')).toLowerCase();
+                if (options?.workspaceFolders) {
+                    for (const wf of options.workspaceFolders) {
+                        const name = path.basename(wf);
+                        if (searchContext.includes(name.toLowerCase())) {
+                            repo = name;
+                            break;
+                        }
+                    }
                 }
-                else if (checkText.includes('claude-session') || checkText.includes('extension')) {
-                    repo = 'claude-session-manager';
+                if (!repo && lastCwd && fs.existsSync(lastCwd)) {
+                    try {
+                        const entries = fs.readdirSync(lastCwd, { withFileTypes: true });
+                        for (const entry of entries) {
+                            if (entry.isDirectory() && !entry.name.startsWith('.')) {
+                                if (fs.existsSync(path.join(lastCwd, entry.name, '.git'))) {
+                                    if (searchContext.includes(entry.name.toLowerCase())) {
+                                        repo = entry.name;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch { }
                 }
-                else {
-                    repo = 'app-backend';
+                if (!repo) {
+                    if (options?.defaultRepo) {
+                        repo = options.defaultRepo;
+                    }
+                    else if (options?.workspaceFolders && options.workspaceFolders.length > 0) {
+                        repo = path.basename(options.workspaceFolders[0]);
+                    }
+                    else if (lastCwd) {
+                        repo = path.basename(lastCwd);
+                    }
+                    else {
+                        repo = '';
+                    }
                 }
             }
             // Title tinh gọn: Lấy từ aiTitle hoặc prompt đầu tiên
@@ -465,19 +528,32 @@ class SessionScanner {
                         checkDirs.push(path.join(lastCwd, repo));
                     }
                     checkDirs.push(lastCwd);
+                    const parentCwd = path.dirname(lastCwd);
+                    if (repo && repo !== path.basename(parentCwd)) {
+                        checkDirs.push(path.join(parentCwd, repo));
+                    }
+                    checkDirs.push(parentCwd);
                 }
-                // Kiểm tra thêm trong ~/Documents/workspace/<repo>
-                const homeWorkspace = path.join(os.homedir(), 'Documents', 'workspace');
-                if (repo) {
-                    checkDirs.push(path.join(homeWorkspace, repo));
+                if (options?.workspaceFolders) {
+                    for (const wf of options.workspaceFolders) {
+                        if (repo && repo !== path.basename(wf)) {
+                            checkDirs.push(path.join(wf, repo));
+                        }
+                        checkDirs.push(wf);
+                    }
                 }
-                checkDirs.push(homeWorkspace);
+                const checkedSet = new Set();
                 for (const dir of checkDirs) {
+                    if (!dir || checkedSet.has(dir) || !fs.existsSync(dir))
+                        continue;
+                    checkedSet.add(dir);
                     const gitInfo = this.getGitInfoFromDir(dir);
                     if (gitInfo && gitInfo.branch && gitInfo.branch !== 'HEAD') {
                         branch = gitInfo.branch;
                         if (gitInfo.isWorktree)
                             isWorktree = true;
+                        if (!repo && gitInfo.mainRepo)
+                            repo = gitInfo.mainRepo;
                         break;
                     }
                 }
@@ -492,7 +568,7 @@ class SessionScanner {
             const outputTokensFormatted = outputTokens > 0 ? this.formatTokens(outputTokens) : '0';
             const costUSD = totalCostUSD > 0 ? `$${totalCostUSD.toFixed(2)}` : undefined;
             const shortId = sessionId.slice(0, 8);
-            if (repo.toLowerCase().includes('observer') ||
+            if ((repo && repo.toLowerCase().includes('observer')) ||
                 modelName.toLowerCase().includes('synthetic') ||
                 (title && title.toLowerCase().includes('condense the tool payload')) ||
                 (meaningfulFirstPrompt && meaningfulFirstPrompt.toLowerCase().includes('condense the tool payload'))) {
@@ -517,7 +593,11 @@ class SessionScanner {
                 outputTokensFormatted,
                 costUSD,
                 turnCount: turnCount || 1,
-                shortId
+                shortId,
+                cwd: lastCwd || undefined,
+                rawInputTokens: inputTokens,
+                rawOutputTokens: outputTokens,
+                totalTokens: inputTokens + outputTokens
             };
         }
         catch {

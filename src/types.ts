@@ -22,4 +22,13 @@ export interface ClaudeSession {
   costUSD?: string;          // Ví dụ: "$425.02", "$1.71"
   turnCount: number;         // Ví dụ: 1049, 185
   shortId: string;           // 8 ký tự cuối hoặc đầu: "3fde811b"
+  cwd?: string;
+  rawInputTokens?: number;
+  rawOutputTokens?: number;
+  totalTokens?: number;
+}
+
+export interface ScanOptions {
+  workspaceFolders?: string[];
+  defaultRepo?: string;
 }

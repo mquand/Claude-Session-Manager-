@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import { ClaudeSession } from './types';
 import { SessionScanner } from './scanner';
 import { ExtensionUpdater } from './updater';
@@ -223,7 +224,21 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
   public async refresh() {
     const config = vscode.workspace.getConfiguration('claudeSessionManager');
     const customPath = config.get<string>('storagePath');
-    const sessions = await SessionScanner.scanSessions(customPath);
+    const workspaceRoot = config.get<string>('workspaceRoot');
+    const defaultRepo = config.get<string>('defaultRepo');
+
+    const wsFolders = vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) || [];
+    if (workspaceRoot) {
+      const resolved = SessionScanner.resolveHomePath(workspaceRoot);
+      if (fs.existsSync(resolved) && !wsFolders.includes(resolved)) {
+        wsFolders.push(resolved);
+      }
+    }
+
+    const sessions = await SessionScanner.scanSessions(customPath, {
+      workspaceFolders: wsFolders,
+      defaultRepo: defaultRepo || undefined
+    });
     this._lastSessions = sessions;
 
     const startOfToday = new Date();
@@ -432,10 +447,47 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     .workspace-bar {
       display: flex;
       align-items: center;
-      gap: 5px;
+      justify-content: space-between;
+      gap: 6px;
       margin-bottom: 8px;
       padding: 1px 0;
+    }
+
+    .ws-pills-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
       overflow-x: auto;
+      min-width: 0;
+    }
+
+    .ws-tokens-badge {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      background: rgba(30, 35, 45, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 2px 8px;
+      white-space: nowrap;
+      user-select: none;
+      flex-shrink: 0;
+      cursor: default;
+    }
+
+    .ws-tokens-label {
+      color: #64748b;
+      font-size: 10.5px;
+      font-weight: 500;
+    }
+
+    .ws-tokens-num {
+      color: #38bdf8;
+      font-weight: 600;
+      font-family: monospace;
+      font-size: 11px;
     }
 
     .ws-pill {
@@ -452,6 +504,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       transition: all 0.15s ease;
       white-space: nowrap;
       user-select: none;
+      flex-shrink: 0;
     }
 
     .ws-pill:hover {
@@ -844,15 +897,21 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     </button>
   </div>
 
-  <!-- Thanh chọn Workspace / Dự án -->
-  <div class="workspace-bar" id="workspaceBar" style="display: none;">
-    <button class="ws-pill active" id="wsBtnCurrent">
-      <span class="ws-dot"></span>
-      <span id="wsCurrentName">app-backend</span>
-    </button>
-    <button class="ws-pill" id="wsBtnAll">
-      <span id="wsAllText">Tất cả dự án</span>
-    </button>
+  <!-- Thanh chọn Workspace / Dự án & Thống kê Token hôm nay -->
+  <div class="workspace-bar" id="workspaceBar">
+    <div class="ws-pills-wrap">
+      <button class="ws-pill active" id="wsBtnCurrent" style="display: none;">
+        <span class="ws-dot"></span>
+        <span id="wsCurrentName"></span>
+      </button>
+      <button class="ws-pill" id="wsBtnAll">
+        <span id="wsAllText">Tất cả dự án</span>
+      </button>
+    </div>
+    <div class="ws-tokens-badge" id="wsTokensBadge" title="Tổng số token Claude đã dùng hôm nay">
+      <span class="ws-tokens-label">tokens:</span>
+      <span class="ws-tokens-num" id="wsTokensNum">0</span>
+    </div>
   </div>
 
   <!-- 3 Tab Lọc: Đang chạy, Hôm nay, Tất cả -->
@@ -880,6 +939,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     const wsBtnAll = document.getElementById('wsBtnAll');
     const wsCurrentName = document.getElementById('wsCurrentName');
     const wsAllText = document.getElementById('wsAllText');
+    const wsTokensBadge = document.getElementById('wsTokensBadge');
+    const wsTokensNum = document.getElementById('wsTokensNum');
 
     // 2. Khôi phục State an toàn
     const savedState = vscode.getState() || {};
@@ -1095,19 +1156,65 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
 
-        // Update workspace bar UI
-        if (currentWorkspace && currentWorkspace.name) {
-          if (workspaceBar) workspaceBar.style.display = 'flex';
-          if (wsCurrentName) wsCurrentName.textContent = currentWorkspace.name;
-          if (wsMode === 'current') {
-            wsBtnCurrent?.classList.add('active');
-            wsBtnAll?.classList.remove('active');
+        // Update workspace bar UI & token count
+        if (workspaceBar) {
+          workspaceBar.style.display = 'flex';
+          if (currentWorkspace && currentWorkspace.name) {
+            if (wsBtnCurrent) {
+              wsBtnCurrent.style.display = 'inline-flex';
+              if (wsCurrentName) wsCurrentName.textContent = currentWorkspace.name;
+            }
+            if (wsMode === 'current') {
+              wsBtnCurrent?.classList.add('active');
+              wsBtnAll?.classList.remove('active');
+            } else {
+              wsBtnAll?.classList.add('active');
+              wsBtnCurrent?.classList.remove('active');
+            }
           } else {
+            if (wsBtnCurrent) wsBtnCurrent.style.display = 'none';
             wsBtnAll?.classList.add('active');
-            wsBtnCurrent?.classList.remove('active');
           }
-        } else {
-          if (workspaceBar) workspaceBar.style.display = 'none';
+        }
+
+        // Tính tổng token đã dùng hôm nay theo phạm vi lọc
+        const todaySessions = allSessions.filter(s => s.updatedAt >= startOfToday.getTime());
+        const tokenSessions = (wsMode === 'current' && currentWorkspace && currentWorkspace.name)
+          ? todaySessions.filter(s => {
+              if (!s.repo) return true;
+              const targetRepo = currentWorkspace.name.toLowerCase();
+              return s.repo.toLowerCase() === targetRepo || (s.cwd && s.cwd.toLowerCase().includes(targetRepo));
+            })
+          : todaySessions;
+
+        let todayTotalTokens = 0;
+        let todayInTokens = 0;
+        let todayOutTokens = 0;
+        tokenSessions.forEach(s => {
+          todayTotalTokens += (s.totalTokens || 0);
+          todayInTokens += (s.rawInputTokens || 0);
+          todayOutTokens += (s.rawOutputTokens || 0);
+        });
+
+        function formatTokensSimple(n) {
+          if (!n || n <= 0) return '0';
+          if (n >= 1000000000) return (n / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
+          if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+          if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+          return n.toString();
+        }
+
+        if (wsTokensNum) {
+          wsTokensNum.textContent = formatTokensSimple(todayTotalTokens);
+        }
+        if (wsTokensBadge) {
+          const scopeLabel = (wsMode === 'current' && currentWorkspace && currentWorkspace.name) ? currentWorkspace.name : (t('wsAll') || 'Tất cả dự án');
+          const inFormatted = formatTokensSimple(todayInTokens);
+          const outFormatted = formatTokensSimple(todayOutTokens);
+          const numFormatted = todayTotalTokens.toLocaleString();
+          wsTokensBadge.title = (currentLang === 'en')
+            ? ('Today tokens (' + scopeLabel + '): ' + numFormatted + ' (in: ' + inFormatted + ', out: ' + outFormatted + ')')
+            : ('Tổng token hôm nay (' + scopeLabel + '): ' + numFormatted + ' (in: ' + inFormatted + ', out: ' + outFormatted + ')');
         }
 
         // Bổ sung cờ isNeedReview: các task hoàn thành trong ngày hôm nay nhưng người dùng CHƯA bấm xem
