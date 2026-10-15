@@ -76,22 +76,13 @@ Located right beside the search input:
 
 ---
 
-## 🚀 Automated GitHub Releases & CI/CD
-This project includes a ready-to-use GitHub Actions workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
-- Pushing to the `main` branch or pushing a git tag (e.g. `v0.1.2`) automatically:
-  1. Reads the version from `package.json`.
-  2. Compiles TypeScript and packages the `.vsix` archive.
-  3. Publishes an official **GitHub Release** with `claude-session-manager-<version>.vsix` attached for direct public download!
-
----
-
 ## 🛠️ Installation
 
 ### Method 1: Install from `.vsix` Package (Recommended for Users)
 
 Compatible with macOS, Linux, and Windows without requiring Node.js:
 
-1. Download **`claude-session-manager-0.1.2.vsix`** from the latest GitHub Release or repository root.
+1. Download the latest **`.vsix`** package from [GitHub Releases](https://github.com/mquand/Claude-Session-Manager-/releases).
 2. Open VS Code and press:
    - **macOS**: `Cmd + Shift + P`
    - **Windows / Linux**: `Ctrl + Shift + P`
@@ -135,19 +126,6 @@ To customize settings:
 3. Configurable properties:
    - `claudeSessionManager.storagePath`: Custom path to your Claude project directory.
    - `claudeSessionManager.autoRefreshInterval`: Background scan interval in seconds (default: `10`).
-
----
-
-## 📦 Building a New `.vsix` Release
-
-To package a new release for distribution:
-
-```bash
-npm run compile
-npx @vscode/vsce package --no-dependencies
-```
-
-This outputs `claude-session-manager-0.1.0.vsix`, ready to be attached to GitHub Releases.
 
 ---
 
