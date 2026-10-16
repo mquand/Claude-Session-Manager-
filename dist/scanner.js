@@ -276,12 +276,15 @@ class SessionScanner {
             const stdout = child_process.execSync('git worktree list --porcelain', { cwd: repoPath, encoding: 'utf8', timeout: 3000 });
             const worktrees = [];
             let current = {};
+            const pushIfValid = (item) => {
+                if (item.path && item.branch && !item.isPrunable && fs.existsSync(item.path)) {
+                    worktrees.push({ path: item.path, branch: item.branch, head: item.head });
+                }
+            };
             for (const line of stdout.split('\n')) {
                 const trimmed = line.trim();
                 if (trimmed.startsWith('worktree ')) {
-                    if (current.path && current.branch) {
-                        worktrees.push({ path: current.path, branch: current.branch, head: current.head });
-                    }
+                    pushIfValid(current);
                     current = { path: trimmed.replace('worktree ', '').trim() };
                 }
                 else if (trimmed.startsWith('branch ')) {
@@ -290,21 +293,49 @@ class SessionScanner {
                 else if (trimmed.startsWith('HEAD ')) {
                     current.head = trimmed.replace('HEAD ', '').trim();
                 }
+                else if (trimmed.startsWith('prunable')) {
+                    current.isPrunable = true;
+                }
                 else if (trimmed === '') {
-                    if (current.path && current.branch) {
-                        worktrees.push({ path: current.path, branch: current.branch, head: current.head });
-                        current = {};
-                    }
+                    pushIfValid(current);
+                    current = {};
                 }
             }
-            if (current.path && current.branch) {
-                worktrees.push({ path: current.path, branch: current.branch, head: current.head });
-            }
+            pushIfValid(current);
             return worktrees;
         }
         catch {
             return [];
         }
+    }
+    static pruneWorktrees(workspaceFolders) {
+        let prunedCount = 0;
+        if (!workspaceFolders || workspaceFolders.length === 0)
+            return 0;
+        for (const wf of workspaceFolders) {
+            if (!fs.existsSync(wf))
+                continue;
+            try {
+                const gitDir = path.join(wf, '.git');
+                if (fs.existsSync(gitDir)) {
+                    child_process.execSync('git worktree prune', { cwd: wf, encoding: 'utf8', timeout: 5000 });
+                    prunedCount++;
+                }
+                const entries = fs.readdirSync(wf, { withFileTypes: true });
+                for (const entry of entries) {
+                    if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+                        const sub = path.join(wf, entry.name);
+                        const subGit = path.join(sub, '.git');
+                        if (fs.existsSync(subGit) && fs.statSync(subGit).isDirectory()) {
+                            child_process.execSync('git worktree prune', { cwd: sub, encoding: 'utf8', timeout: 5000 });
+                            prunedCount++;
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+        return prunedCount;
     }
     static discoverWorkspaceWorktrees(workspaceFolders) {
         if (!workspaceFolders || workspaceFolders.length === 0)
@@ -320,7 +351,7 @@ class SessionScanner {
                 const repoName = wfGit.mainRepo || path.basename(wf);
                 const list = this.getWorktreesFromRepo(wf);
                 for (const item of list) {
-                    if (!seenPaths.has(item.path)) {
+                    if (!seenPaths.has(item.path) && fs.existsSync(item.path)) {
                         seenPaths.add(item.path);
                         results.push({ path: item.path, branch: item.branch, repo: repoName });
                     }
@@ -347,7 +378,7 @@ class SessionScanner {
                         if (!gitInfo.isWorktree) {
                             const list = this.getWorktreesFromRepo(subPath);
                             for (const item of list) {
-                                if (!seenPaths.has(item.path)) {
+                                if (!seenPaths.has(item.path) && fs.existsSync(item.path)) {
                                     seenPaths.add(item.path);
                                     results.push({ path: item.path, branch: item.branch, repo: repoName || entry.name });
                                 }

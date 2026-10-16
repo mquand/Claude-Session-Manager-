@@ -285,22 +285,44 @@ class IssuesViewProvider {
             return b.lastTime - a.lastTime;
         });
         for (const item of sorted) {
+            const exists = item.cwd ? fs.existsSync(item.cwd) : false;
+            // Nếu thư mục không còn tồn tại trên disk và không có session nào -> bỏ qua hoàn toàn
+            if (!exists && item.count === 0) {
+                continue;
+            }
             const isCurrent = item.branch === this._currentWorktreeFilter;
             const checkMark = isCurrent ? '✓ ' : '';
-            const countDesc = item.count > 0
+            let countDesc = item.count > 0
                 ? `${item.count} session${item.count > 1 ? 's' : ''}`
                 : (lang === 'en' ? '$(circle-outline) No sessions yet (Ready)' : '$(circle-outline) Chưa có session (Sẵn sàng)');
+            if (!exists && item.count > 0) {
+                countDesc += lang === 'en' ? ' • (Folder deleted)' : ' • (Thư mục đã xoá)';
+            }
             items.push({
-                label: `$(git-branch) ${checkMark}${item.branch}`,
+                label: !exists && item.count > 0 ? `$(archive) ${checkMark}${item.branch}` : `$(git-branch) ${checkMark}${item.branch}`,
                 description: `${countDesc}${item.repo ? ' • ' + item.repo : ''}`,
                 detail: item.cwd ? (lang === 'en' ? `Directory: ${item.cwd}` : `Thư mục: ${item.cwd}`) : undefined,
                 branch: item.branch
             });
         }
+        // Tùy chọn Dọn dẹp Git Worktree (git worktree prune)
+        items.push({
+            label: lang === 'en' ? '$(trash) Prune deleted worktrees (git worktree prune)' : '$(trash) Dọn dẹp metadata worktree đã xoá (git worktree prune)',
+            description: lang === 'en' ? 'Clean up Git tracking references for deleted folders' : 'Dọn dẹp vết lưu trữ Git của các thư mục worktree đã xoá',
+            action: 'prune'
+        });
         const selected = await vscode.window.showQuickPick(items, {
             placeHolder: lang === 'en' ? 'Select Git Worktree / Branch to filter sessions...' : 'Chọn Git Worktree / Nhánh để lọc các phiên hội thoại...'
         });
         if (selected !== undefined) {
+            if (selected.action === 'prune') {
+                const count = scanner_1.SessionScanner.pruneWorktrees(wsFolders);
+                vscode.window.showInformationMessage(lang === 'en'
+                    ? `Cleaned up deleted worktrees metadata in Git (${count} repositories checked).`
+                    : `Đã dọn dẹp các metadata worktree đã xoá khỏi Git (${count} repository).`);
+                await this.refresh();
+                return;
+            }
             this._currentWorktreeFilter = selected.branch || '';
             for (const view of this._views) {
                 view.webview.postMessage({
@@ -374,6 +396,14 @@ class IssuesViewProvider {
             defaultRepo: defaultRepo || undefined
         });
         this._lastSessions = sessions;
+        if (this._currentWorktreeFilter) {
+            const hasBranchInSessions = sessions.some(s => s.branch === this._currentWorktreeFilter);
+            const discovered = scanner_1.SessionScanner.discoverWorkspaceWorktrees(wsFolders);
+            const hasBranchInWorktrees = discovered.some(w => w.branch === this._currentWorktreeFilter);
+            if (!hasBranchInSessions && !hasBranchInWorktrees) {
+                this._currentWorktreeFilter = '';
+            }
+        }
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
         const needAcceptCount = sessions.filter(s => s.status === 'need_accept').length;
