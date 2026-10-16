@@ -79,7 +79,8 @@ class IssuesViewProvider {
                         reviewedIds: this.getReviewedIds(),
                         currentWorkspace: this.getCurrentWorkspace(),
                         lang: this.getLanguage(),
-                        worktreeFilter: this._currentWorktreeFilter
+                        worktreeFilter: this._currentWorktreeFilter,
+                        hasWorktrees: this.checkHasWorktrees()
                     });
                 }
                 this.refresh();
@@ -95,7 +96,8 @@ class IssuesViewProvider {
                             reviewedIds: this.getReviewedIds(),
                             currentWorkspace: this.getCurrentWorkspace(),
                             lang: this.getLanguage(),
-                            worktreeFilter: this._currentWorktreeFilter
+                            worktreeFilter: this._currentWorktreeFilter,
+                            hasWorktrees: this.checkHasWorktrees()
                         });
                     }
                     await this.refresh();
@@ -230,6 +232,21 @@ class IssuesViewProvider {
     async showWorktreeQuickPick() {
         const lang = this.getLanguage();
         const worktreeMap = new Map();
+        // 1. Quét các Git Worktree thực tế từ workspace (kể cả khi chưa chạy session nào)
+        const wsFolders = vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) || [];
+        const discovered = scanner_1.SessionScanner.discoverWorkspaceWorktrees(wsFolders);
+        for (const wt of discovered) {
+            if (wt.branch) {
+                worktreeMap.set(wt.branch, {
+                    branch: wt.branch,
+                    cwd: wt.path,
+                    repo: wt.repo,
+                    count: 0,
+                    lastTime: 0
+                });
+            }
+        }
+        // 2. Cập nhật số session từ các phiên đã quét được
         for (const s of this._lastSessions) {
             if (s.branch) {
                 const key = s.branch;
@@ -260,13 +277,22 @@ class IssuesViewProvider {
                 branch: ''
             }
         ];
-        const sorted = Array.from(worktreeMap.values()).sort((a, b) => b.lastTime - a.lastTime);
+        const sorted = Array.from(worktreeMap.values()).sort((a, b) => {
+            // Ưu tiên các worktree có session trước, sau đó đến thời gian
+            if ((b.count > 0 ? 1 : 0) !== (a.count > 0 ? 1 : 0)) {
+                return b.count - a.count;
+            }
+            return b.lastTime - a.lastTime;
+        });
         for (const item of sorted) {
             const isCurrent = item.branch === this._currentWorktreeFilter;
             const checkMark = isCurrent ? '✓ ' : '';
+            const countDesc = item.count > 0
+                ? `${item.count} session${item.count > 1 ? 's' : ''}`
+                : (lang === 'en' ? '$(circle-outline) No sessions yet (Ready)' : '$(circle-outline) Chưa có session (Sẵn sàng)');
             items.push({
                 label: `$(git-branch) ${checkMark}${item.branch}`,
-                description: `${item.count} session${item.count > 1 ? 's' : ''}${item.repo ? ' • ' + item.repo : ''}`,
+                description: `${countDesc}${item.repo ? ' • ' + item.repo : ''}`,
                 detail: item.cwd ? (lang === 'en' ? `Directory: ${item.cwd}` : `Thư mục: ${item.cwd}`) : undefined,
                 branch: item.branch
             });
@@ -283,6 +309,11 @@ class IssuesViewProvider {
                 });
             }
         }
+    }
+    checkHasWorktrees() {
+        const wsFolders = vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) || [];
+        const discovered = scanner_1.SessionScanner.discoverWorkspaceWorktrees(wsFolders);
+        return discovered.length > 0 || this._lastSessions.some(s => !!s.branch);
     }
     setupRealtimeWatchers() {
         this._watchers.forEach(w => w.dispose());
@@ -372,7 +403,8 @@ class IssuesViewProvider {
                 reviewedIds: this.getReviewedIds(),
                 currentWorkspace,
                 lang,
-                worktreeFilter: this._currentWorktreeFilter
+                worktreeFilter: this._currentWorktreeFilter,
+                hasWorktrees: this.checkHasWorktrees()
             });
         }
         const todayCount = sessions.filter(s => s.updatedAt >= startOfToday.getTime()).length;
@@ -1271,6 +1303,7 @@ class IssuesViewProvider {
     let currentFilter = savedState.currentFilter || 'today';
     let currentWorkspace = savedState.currentWorkspace || null;
     let currentWorktree = savedState.currentWorktree || null;
+    let hasWorkspaceWorktrees = savedState.hasWorkspaceWorktrees || false;
     let wsMode = savedState.wsMode || 'current';
     let currentLang = savedState.lang || 'vi';
     let sectionState = savedState.sectionState || {
@@ -1344,7 +1377,8 @@ class IssuesViewProvider {
         currentWorktree,
         wsMode,
         lang: currentLang,
-        sectionState
+        sectionState,
+        hasWorkspaceWorktrees
       });
     }
 
@@ -1506,7 +1540,7 @@ class IssuesViewProvider {
         }
 
         // Cập nhật dòng bộ lọc Worktree (tách dòng riêng)
-        const hasAnyWorktree = allSessions.some(s => !!s.branch);
+        const hasAnyWorktree = allSessions.some(s => !!s.branch) || !!hasWorkspaceWorktrees || !!currentWorktree;
         if (worktreeFilterRow) {
           if (hasAnyWorktree) {
             worktreeFilterRow.style.display = 'inline-flex';
@@ -1698,7 +1732,14 @@ class IssuesViewProvider {
         }
 
         if (filtered.length === 0) {
-          if (currentFilter === 'active') {
+          if (currentWorktree) {
+            html = '<div style="text-align: center; color: var(--text-muted); padding: 30px 16px; font-size: 12px; line-height: 1.6;">' +
+              '<div style="font-size: 24px; margin-bottom: 8px;">🌿</div>' +
+              '<div style="font-weight: 600; color: var(--text-main); margin-bottom: 4px;">' + (currentLang === 'en' ? 'Worktree: ' : 'Git Worktree: ') + escapeHtml(currentWorktree) + '</div>' +
+              '<div>' + (currentLang === 'en' ? 'No Claude sessions recorded for this worktree yet.' : 'Chưa có phiên làm việc Claude nào trong worktree này.') + '</div>' +
+              '<div style="margin-top: 8px; font-size: 11px; opacity: 0.8;">' + (currentLang === 'en' ? 'Run <code>claude</code> in this folder to start a new task.' : 'Mở terminal tại thư mục worktree này và gõ <code>claude</code> để bắt đầu task mới!') + '</div>' +
+              '</div>';
+          } else if (currentFilter === 'active') {
             html = '<div style="text-align: center; color: #64748b; padding: 28px 16px;">' +
               '<div style="font-size: 22px; margin-bottom: 6px;">✨</div>' +
               '<div style="font-weight: 600; color: #94a3b8;">' + t('noSessionsActive') + '</div>' +
@@ -1891,6 +1932,9 @@ class IssuesViewProvider {
         }
         if (message.worktreeFilter !== undefined) {
           currentWorktree = message.worktreeFilter || null;
+        }
+        if (message.hasWorktrees !== undefined) {
+          hasWorkspaceWorktrees = !!message.hasWorktrees;
         }
         saveState();
         renderSessions();

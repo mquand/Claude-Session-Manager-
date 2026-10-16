@@ -2,10 +2,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as readline from 'readline';
+import * as child_process from 'child_process';
 import { ClaudeSession, SessionStatus, ScanOptions } from './types';
 
 export class SessionScanner {
-  private static readonly CACHE_VERSION = 3;
+  private static readonly CACHE_VERSION = 4;
   private static sessionCache = new Map<string, { session: ClaudeSession; mtimeMs: number; cacheVersion?: number }>();
 
   public static deleteSession(sessionId: string, filePath: string): boolean {
@@ -252,6 +253,110 @@ export class SessionScanner {
       }
     } catch {}
     return null;
+  }
+
+  public static decodeProjectDir(projectDirName: string, workspaceFolders?: string[]): string | null {
+    if (!workspaceFolders || workspaceFolders.length === 0) return null;
+    const baseName = path.basename(projectDirName);
+    for (const wf of workspaceFolders) {
+      const encodedWf = wf.replace(/[\\/]/g, '-');
+      if (baseName.startsWith(encodedWf)) {
+        const remainder = baseName.slice(encodedWf.length).replace(/^-/, '');
+        if (!remainder) return wf;
+        const candidate = path.join(wf, remainder);
+        if (fs.existsSync(candidate)) return candidate;
+      }
+    }
+    return null;
+  }
+
+  public static getWorktreesFromRepo(repoPath: string): Array<{ path: string; branch: string; head?: string }> {
+    try {
+      const gitPath = path.join(repoPath, '.git');
+      if (!fs.existsSync(gitPath)) return [];
+      const stdout = child_process.execSync('git worktree list --porcelain', { cwd: repoPath, encoding: 'utf8', timeout: 3000 });
+      const worktrees: Array<{ path: string; branch: string; head?: string }> = [];
+      let current: { path?: string; branch?: string; head?: string } = {};
+
+      for (const line of stdout.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('worktree ')) {
+          if (current.path && current.branch) {
+            worktrees.push({ path: current.path, branch: current.branch, head: current.head });
+          }
+          current = { path: trimmed.replace('worktree ', '').trim() };
+        } else if (trimmed.startsWith('branch ')) {
+          current.branch = trimmed.replace('branch refs/heads/', '').trim();
+        } else if (trimmed.startsWith('HEAD ')) {
+          current.head = trimmed.replace('HEAD ', '').trim();
+        } else if (trimmed === '') {
+          if (current.path && current.branch) {
+            worktrees.push({ path: current.path, branch: current.branch, head: current.head });
+            current = {};
+          }
+        }
+      }
+      if (current.path && current.branch) {
+        worktrees.push({ path: current.path, branch: current.branch, head: current.head });
+      }
+      return worktrees;
+    } catch {
+      return [];
+    }
+  }
+
+  public static discoverWorkspaceWorktrees(workspaceFolders?: string[]): Array<{ path: string; branch: string; repo?: string }> {
+    if (!workspaceFolders || workspaceFolders.length === 0) return [];
+    const results: Array<{ path: string; branch: string; repo?: string }> = [];
+    const seenPaths = new Set<string>();
+
+    for (const wf of workspaceFolders) {
+      if (!fs.existsSync(wf)) continue;
+
+      // 1. Kiểm tra chính thư mục wf
+      const wfGit = this.getGitInfoFromDir(wf);
+      if (wfGit) {
+        const repoName = wfGit.mainRepo || path.basename(wf);
+        const list = this.getWorktreesFromRepo(wf);
+        for (const item of list) {
+          if (!seenPaths.has(item.path)) {
+            seenPaths.add(item.path);
+            results.push({ path: item.path, branch: item.branch, repo: repoName });
+          }
+        }
+      }
+
+      // 2. Quét các thư mục con cấp 1 của wf (ví dụ: project-a, project-b, feature-worktree)
+      try {
+        const entries = fs.readdirSync(wf, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+          const subPath = path.join(wf, entry.name);
+          if (seenPaths.has(subPath)) continue;
+
+          const gitInfo = this.getGitInfoFromDir(subPath);
+          if (gitInfo) {
+            const repoName = gitInfo.mainRepo || (gitInfo.isWorktree ? undefined : entry.name);
+            seenPaths.add(subPath);
+            if (gitInfo.branch) {
+              results.push({ path: subPath, branch: gitInfo.branch, repo: repoName || entry.name });
+            }
+            if (!gitInfo.isWorktree) {
+              const list = this.getWorktreesFromRepo(subPath);
+              for (const item of list) {
+                if (!seenPaths.has(item.path)) {
+                  seenPaths.add(item.path);
+                  results.push({ path: item.path, branch: item.branch, repo: repoName || entry.name });
+                }
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    return results;
   }
 
   private static async fastParseSession(
@@ -537,8 +642,22 @@ export class SessionScanner {
         }
       }
 
-      // Nếu branch chưa tìm thấy hoặc là HEAD, kiểm tra thư mục git tương ứng
-      if (!branch || branch === 'HEAD') {
+      // Nếu lastCwd chưa có, giải mã từ projectDir
+      if (!lastCwd) {
+        const decoded = this.decodeProjectDir(projectDir, options?.workspaceFolders);
+        if (decoded) {
+          lastCwd = decoded;
+          const gitInfo = this.getGitInfoFromDir(decoded);
+          if (gitInfo) {
+            if (gitInfo.branch && (!branch || branch === 'HEAD')) branch = gitInfo.branch;
+            if (gitInfo.isWorktree) isWorktree = true;
+            if (gitInfo.mainRepo) repo = gitInfo.mainRepo;
+          }
+        }
+      }
+
+      // Nếu branch chưa tìm thấy hoặc là HEAD hoặc chưa xác định isWorktree, kiểm tra thư mục git tương ứng
+      if (!branch || branch === 'HEAD' || !isWorktree) {
         const checkDirs: string[] = [];
         if (lastCwd) {
           if (repo && repo !== path.basename(lastCwd)) {
@@ -567,11 +686,13 @@ export class SessionScanner {
           checkedSet.add(dir);
 
           const gitInfo = this.getGitInfoFromDir(dir);
-          if (gitInfo && gitInfo.branch && gitInfo.branch !== 'HEAD') {
-            branch = gitInfo.branch;
+          if (gitInfo) {
+            if (gitInfo.branch && gitInfo.branch !== 'HEAD' && (!branch || branch === 'HEAD')) {
+              branch = gitInfo.branch;
+            }
             if (gitInfo.isWorktree) isWorktree = true;
             if (!repo && gitInfo.mainRepo) repo = gitInfo.mainRepo;
-            break;
+            if (branch && branch !== 'HEAD' && isWorktree) break;
           }
         }
       }
