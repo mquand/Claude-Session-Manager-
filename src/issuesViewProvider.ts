@@ -592,8 +592,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       --token-badge-bg: rgba(30, 35, 45, 0.7);
       --token-badge-border: rgba(255, 255, 255, 0.08);
       --token-badge-num: #38bdf8;
-      --repo-badge-bg: #252b38;
-      --repo-badge-fg: #93c5fd;
+      --repo-badge-bg: rgba(255, 255, 255, 0.05);
+      --repo-badge-fg: #94a3b8;
       --issue-badge-bg: #1e3a5f;
       --issue-badge-fg: #60a5fa;
       --branch-name-fg: #7dd3fc;
@@ -632,8 +632,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       --token-badge-bg: rgba(0, 0, 0, 0.05);
       --token-badge-border: rgba(0, 0, 0, 0.1);
       --token-badge-num: #0284c7;
-      --repo-badge-bg: #e0f2fe;
-      --repo-badge-fg: #0369a1;
+      --repo-badge-bg: #f1f5f9;
+      --repo-badge-fg: #475569;
       --issue-badge-bg: #dbeafe;
       --issue-badge-fg: #1d4ed8;
       --branch-name-fg: #0284c7;
@@ -1177,10 +1177,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     .repo-badge {
       background: var(--repo-badge-bg);
       color: var(--repo-badge-fg);
-      padding: 2px 7px;
+      border: 1px solid var(--pill-border);
+      padding: 1px 6px;
       border-radius: 4px;
       font-size: 11px;
-      font-weight: 600;
+      font-weight: 500;
       font-family: monospace;
       flex-shrink: 0;
     }
@@ -1191,7 +1192,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       display: inline-flex;
       align-items: center;
       gap: 3px;
-      flex-shrink: 0;
+      min-width: 0;
+      max-width: 100%;
       cursor: pointer;
       border-radius: 3px;
       padding: 1px 3px;
@@ -1207,7 +1209,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       color: var(--branch-name-fg);
       font-family: monospace;
       font-weight: 600;
-      max-width: 180px;
+      max-width: 130px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -1219,12 +1221,13 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       background: rgba(245, 158, 11, 0.15);
       color: #d97706;
       border: 1px solid rgba(245, 158, 11, 0.3);
-      padding: 1px 4px;
+      padding: 1px 5px;
       border-radius: 3px;
       font-size: 9.5px;
       font-weight: 600;
       text-transform: uppercase;
       flex-shrink: 0;
+      margin-left: 2px;
       cursor: pointer;
       transition: all 0.15s ease;
     }
@@ -1436,8 +1439,10 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     .footer-bottom-left {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 6px;
       min-width: 0;
+      flex: 1;
+      overflow: hidden;
     }
 
     .footer-meta-item {
@@ -1616,7 +1621,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         secDone: "ĐÃ HOÀN THÀNH",
         btnDiff: "Xem diff",
         btnApprove: "Duyệt",
-        btnReview: "Xem kết quả",
+        btnReview: "Review",
         btnMarkReviewed: "Đã xem",
         btnRetry: "Mở thử lại",
         btnReviewAgain: "Review lại",
@@ -1643,7 +1648,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         secDone: "COMPLETED",
         btnDiff: "View Diff",
         btnApprove: "Approve",
-        btnReview: "Review Result",
+        btnReview: "Review",
         btnMarkReviewed: "Reviewed",
         btnRetry: "Retry",
         btnReviewAgain: "Review again",
@@ -1708,6 +1713,15 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     function openSession(id) {
+      if (id) {
+        const s = allSessions.find(item => item.id === id);
+        if (s && s.isNeedReview) {
+          reviewedIds.add(id);
+          saveState();
+          vscode.postMessage({ type: 'markReviewed', id });
+          renderSessions();
+        }
+      }
       vscode.postMessage({ type: 'openSession', id });
     }
 
@@ -1762,10 +1776,6 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           '<button class="card-action-btn btn-review" data-action="open" data-id="' + s.id + '" title="' + t('btnReview') + '">' +
             '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>' +
             '<span>' + t('btnReview') + '</span>' +
-          '</button>' +
-          '<button class="card-action-btn" data-action="mark-reviewed" data-id="' + s.id + '" title="' + t('btnMarkReviewed') + '">' +
-            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' +
-            '<span>' + t('btnMarkReviewed') + '</span>' +
           '</button>';
       } else if (s.status === 'failed') {
         actionButtons =
@@ -1776,7 +1786,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       } else if (s.status === 'done') {
         actionButtons =
           '<button class="card-action-btn" data-action="unmark-reviewed" data-id="' + s.id + '" title="' + t('btnReviewAgain') + '">' +
-            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>' +
             '<span>' + t('btnReviewAgain') + '</span>' +
           '</button>';
       }
