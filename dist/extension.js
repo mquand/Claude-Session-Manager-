@@ -36,22 +36,18 @@ function activate(context) {
     }));
     context.subscriptions.push(vscode.commands.registerCommand('claudeSessionManager.openTab', (tab) => {
         vscode.commands.executeCommand('claudeSessionManager.issuesView.focus');
-        provider.switchTab(tab);
+        const targetTab = tab === 'active' ? 'today' : tab;
+        provider.switchTab(targetTab);
     }));
     context.subscriptions.push(vscode.commands.registerCommand('claudeSessionManager.statusMenu', async () => {
         const items = [
             {
-                label: '$(sync) Đang chạy & Cần review',
-                description: 'Xem các task đang chạy, chờ duyệt và vừa hoàn thành',
-                tab: 'active'
-            },
-            {
                 label: '$(calendar) Hôm nay',
-                description: 'Xem toàn bộ task phát sinh trong ngày hôm nay',
+                description: 'Xem toàn bộ task phát sinh hôm nay (gồm đang chạy, chờ duyệt và hoàn thành)',
                 tab: 'today'
             },
             {
-                label: '$(list-unordered) Tất cả lịch sử',
+                label: '$(list-unordered) Tất cả các ngày',
                 description: 'Xem toàn bộ lịch sử các sessions',
                 tab: 'all'
             },

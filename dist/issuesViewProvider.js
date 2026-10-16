@@ -413,7 +413,7 @@ class IssuesViewProvider {
         md.isTrusted = true;
         md.supportThemeIcons = true;
         if (lang === 'en') {
-            md.appendMarkdown(`### $(sparkle) **Claude Session Manager**\n\n`);
+            md.appendMarkdown(`### $(sparkle) **Claude Session & Issue Tracker**\n\n`);
             if (needAcceptCount > 0) {
                 md.appendMarkdown(`$(bell-dot) **${needAcceptCount} tasks waiting approval**\n\n`);
             }
@@ -428,14 +428,13 @@ class IssuesViewProvider {
             }
             md.appendMarkdown(`---\n\n`);
             md.appendMarkdown(`**Quick switch tab:**\n\n`);
-            md.appendMarkdown(`* [$(sync) **Running & Review** (${activeTotalCount})](command:claudeSessionManager.openTab?%22active%22)\n`);
             md.appendMarkdown(`* [$(calendar) **Today** (${todayCount})](command:claudeSessionManager.openTab?%22today%22)\n`);
-            md.appendMarkdown(`* [$(list-unordered) **All History** (${sessions.length})](command:claudeSessionManager.openTab?%22all%22)\n\n`);
+            md.appendMarkdown(`* [$(list-unordered) **All Sessions** (${sessions.length})](command:claudeSessionManager.openTab?%22all%22)\n\n`);
             md.appendMarkdown(`---\n\n`);
             md.appendMarkdown(`[$(gear) Settings](command:claudeSessionManager.openSettings) &nbsp;|&nbsp; [$(refresh) Refresh](command:claudeSessionManager.refresh)`);
         }
         else {
-            md.appendMarkdown(`### $(sparkle) **Claude Session Manager**\n\n`);
+            md.appendMarkdown(`### $(sparkle) **Claude Session & Issue Tracker**\n\n`);
             if (needAcceptCount > 0) {
                 md.appendMarkdown(`$(bell-dot) **${needAcceptCount} task đang chờ bạn phê duyệt**\n\n`);
             }
@@ -450,9 +449,8 @@ class IssuesViewProvider {
             }
             md.appendMarkdown(`---\n\n`);
             md.appendMarkdown(`**Chuyển nhanh đến tab:**\n\n`);
-            md.appendMarkdown(`* [$(sync) **Đang chạy & Cần review** (${activeTotalCount})](command:claudeSessionManager.openTab?%22active%22)\n`);
             md.appendMarkdown(`* [$(calendar) **Hôm nay** (${todayCount})](command:claudeSessionManager.openTab?%22today%22)\n`);
-            md.appendMarkdown(`* [$(list-unordered) **Tất cả lịch sử** (${sessions.length})](command:claudeSessionManager.openTab?%22all%22)\n\n`);
+            md.appendMarkdown(`* [$(list-unordered) **Tất cả các ngày** (${sessions.length})](command:claudeSessionManager.openTab?%22all%22)\n\n`);
             md.appendMarkdown(`---\n\n`);
             md.appendMarkdown(`[$(gear) Cài đặt](command:claudeSessionManager.openSettings) &nbsp;|&nbsp; [$(refresh) Làm mới](command:claudeSessionManager.refresh)`);
         }
@@ -1263,11 +1261,10 @@ class IssuesViewProvider {
     </div>
   </div>
 
-  <!-- 3 Tab Lọc: Tất cả > Hôm nay > Đang chạy -->
+  <!-- 2 Tab Lọc: Hôm nay & Tất cả -->
   <div class="filter-tabs">
-    <button class="filter-btn" data-filter="all" id="tabAllBtn">Tất cả</button>
     <button class="filter-btn active" data-filter="today" id="tabTodayBtn">Hôm nay</button>
-    <button class="filter-btn" data-filter="active" id="tabActiveBtn">Đang chạy</button>
+    <button class="filter-btn" data-filter="all" id="tabAllBtn">Tất cả</button>
   </div>
 
   <div id="contentContainer">
@@ -1300,7 +1297,7 @@ class IssuesViewProvider {
     const savedState = vscode.getState() || {};
     let allSessions = Array.isArray(savedState.sessions) ? savedState.sessions : [];
     let reviewedIds = new Set(Array.isArray(savedState.reviewedIds) ? savedState.reviewedIds : []);
-    let currentFilter = savedState.currentFilter || 'today';
+    let currentFilter = (savedState.currentFilter === 'all') ? 'all' : 'today';
     let currentWorkspace = savedState.currentWorkspace || null;
     let currentWorktree = savedState.currentWorktree || null;
     let hasWorkspaceWorktrees = savedState.hasWorkspaceWorktrees || false;
@@ -1388,8 +1385,6 @@ class IssuesViewProvider {
       if (settingsBtn) settingsBtn.title = t('settingsTitle');
       const tabToday = document.getElementById('tabTodayBtn');
       if (tabToday) tabToday.textContent = t('tabToday');
-      const tabActive = document.getElementById('tabActiveBtn');
-      if (tabActive) tabActive.textContent = t('tabActive');
       const tabAll = document.getElementById('tabAllBtn');
       if (tabAll) tabAll.textContent = t('tabAll');
       if (wsAllText) wsAllText.textContent = t('wsAll');
@@ -1616,16 +1611,6 @@ class IssuesViewProvider {
             isNeedReview
           };
         });
-
-        // Cập nhật số lượng đếm trên tab Đang chạy (gồm Chờ duyệt + Đang chạy + Cần review)
-        const totalActive = enrichedSessions.filter(s => s.status === 'need_accept' || s.status === 'running' || s.isNeedReview).length;
-        const activeBtn = document.getElementById('tabActiveBtn');
-        if (activeBtn) {
-          activeBtn.textContent = totalActive > 0 
-            ? (t('tabActive') + ' (' + totalActive + ')') 
-            : t('tabActive');
-        }
-
         let filtered = enrichedSessions;
 
         // Lọc theo Workspace (nếu người dùng chọn tab Dự án này và đang mở 1 workspace)
@@ -1662,8 +1647,6 @@ class IssuesViewProvider {
           // Khi không tìm kiếm: áp dụng tab lọc đang chọn
           if (currentFilter === 'today') {
             filtered = filtered.filter(s => s.updatedAt >= startOfToday.getTime());
-          } else if (currentFilter === 'active') {
-            filtered = filtered.filter(s => s.status === 'need_accept' || s.status === 'running' || s.isNeedReview);
           }
           // 'all': giữ nguyên toàn bộ sessions
         }
@@ -1738,11 +1721,6 @@ class IssuesViewProvider {
               '<div style="font-weight: 600; color: var(--text-main); margin-bottom: 4px;">' + (currentLang === 'en' ? 'Worktree: ' : 'Git Worktree: ') + escapeHtml(currentWorktree) + '</div>' +
               '<div>' + (currentLang === 'en' ? 'No Claude sessions recorded for this worktree yet.' : 'Chưa có phiên làm việc Claude nào trong worktree này.') + '</div>' +
               '<div style="margin-top: 8px; font-size: 11px; opacity: 0.8;">' + (currentLang === 'en' ? 'Run <code>claude</code> in this folder to start a new task.' : 'Mở terminal tại thư mục worktree này và gõ <code>claude</code> để bắt đầu task mới!') + '</div>' +
-              '</div>';
-          } else if (currentFilter === 'active') {
-            html = '<div style="text-align: center; color: #64748b; padding: 28px 16px;">' +
-              '<div style="font-size: 22px; margin-bottom: 6px;">✨</div>' +
-              '<div style="font-weight: 600; color: #94a3b8;">' + t('noSessionsActive') + '</div>' +
               '</div>';
           } else if (currentFilter === 'today') {
             html = '<div style="text-align: center; color: #64748b; padding: 24px;">' + t('noSessionsToday') + '</div>';
