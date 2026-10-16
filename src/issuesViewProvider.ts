@@ -1563,11 +1563,16 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       color: #34d399;
     }
 
-    .footer-meta-item.short-id {
-      color: var(--short-id-fg);
-      font-family: monospace;
+    .footer-bottom-right {
+      display: inline-flex;
+      align-items: center;
       margin-left: auto;
       flex-shrink: 0;
+    }
+
+    .sub-session-token {
+      color: var(--text-muted);
+      font-size: 10.5px;
     }
 
     .sub-sessions-toggle {
@@ -1963,6 +1968,14 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         .replace(/'/g, "&#039;");
     }
 
+    function formatTokensSimple(n) {
+      if (!n || n <= 0) return '0';
+      if (n >= 1000000000) return (n / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
+      if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+      return n.toString();
+    }
+
     function openSession(id) {
       if (id) {
         let s = allSessions.find(item => item.id === id);
@@ -2071,8 +2084,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         '<span class="footer-meta-item branch-info" data-action="filter-worktree" data-branch="' + escapeHtml(s.branch) + '" title="' + (currentLang === 'en' ? 'Click to filter worktree: ' : 'Click để lọc theo worktree: ') + escapeHtml(s.branch) + '">' +
           '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>' +
           'branch: <span class="branch-name">' + escapeHtml(s.branch) + '</span>' +
-        '</span>' +
-        (s.isWorktree ? '<span class="worktree-badge" data-action="filter-worktree" data-branch="' + escapeHtml(s.branch) + '" title="' + (currentLang === 'en' ? 'Git Worktree: ' : 'Git Worktree: ') + escapeHtml(s.branch) + '">worktree</span>' : '')
+        '</span>'
       ) : '';
 
       let subSessionsToggle = '';
@@ -2106,13 +2118,21 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
             const promptSnippet = sub.lastUserPrompt ? escapeHtml(sub.lastUserPrompt.replace(/^>\s*/, '').slice(0, 80)) : '';
             const subTitleTooltip = promptSnippet ? ('&gt; ' + promptSnippet) : (sub.title || sub.id);
 
+            const tokenStr = (sub.totalTokens && sub.totalTokens > 0)
+              ? ('<span style="opacity: 0.35;">•</span><span class="sub-session-token">' + formatTokensSimple(sub.totalTokens) + ' tok</span>')
+              : '';
+            const costStr = sub.costUSD
+              ? ('<span style="opacity: 0.35;">•</span><span style="color: #10b981; font-weight: 600;">' + escapeHtml(sub.costUSD) + '</span>')
+              : '';
+
             itemsHtml += '<div class="sub-session-item" data-action="open" data-id="' + sub.id + '" title="' + subTitleTooltip + '">' +
               '<div class="sub-session-left">' +
                 subBadge +
                 '<span class="sub-session-time">' + escapeHtml(sub.statusMessage) + '</span>' +
                 '<span style="opacity: 0.35;">•</span>' +
                 '<span class="sub-session-meta">' + escapeHtml(sub.modelName || 'Claude') + '</span>' +
-                (sub.costUSD ? ('<span style="opacity: 0.35;">•</span><span style="color: #10b981; font-weight: 600;">' + escapeHtml(sub.costUSD) + '</span>') : '') +
+                tokenStr +
+                costStr +
               '</div>' +
               '<div class="sub-session-right">' +
                 '<button class="sub-session-btn" data-action="open" data-id="' + sub.id + '" title="' + (currentLang === 'en' ? 'Open earlier session' : 'Mở phiên trước này') + '">' +
@@ -2144,7 +2164,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         '</div>' +
         '<div class="footer-bottom-row">' +
           '<div class="footer-bottom-left">' + branchFooterItem + '</div>' +
-          '<span class="footer-meta-item short-id">' + escapeHtml(s.shortId) + '</span>' +
+          (subSessionsToggle ? '<div class="footer-bottom-right">' + subSessionsToggle + '</div>' : '') +
         '</div>' +
       '</div>';
 
@@ -2181,8 +2201,8 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           '<div class="card-badges-wrap">' +
             '<span class="status-dot ' + dotClass + '"></span>' +
             '<span class="repo-badge">' + escapeHtml(s.repo) + '</span>' +
+            (s.isWorktree ? '<span class="worktree-badge" data-action="filter-worktree" data-branch="' + escapeHtml(s.branch) + '" title="' + (currentLang === 'en' ? 'Git Worktree: ' : 'Git Worktree: ') + escapeHtml(s.branch) + '">worktree</span>' : '') +
             statusBadge +
-            subSessionsToggle +
           '</div>' +
           '<div class="card-top-actions">' +
             actionButtons +
