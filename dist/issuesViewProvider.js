@@ -90,9 +90,10 @@ class IssuesViewProvider {
             switch (data.type) {
                 case 'ready': {
                     if (this._lastSessions.length > 0) {
+                        const groupedSessions = IssuesViewProvider.groupSessionsByTaskStream(this._lastSessions);
                         webviewView.webview.postMessage({
                             type: 'updateSessions',
-                            sessions: this._lastSessions,
+                            sessions: groupedSessions,
                             reviewedIds: this.getReviewedIds(),
                             currentWorkspace: this.getCurrentWorkspace(),
                             lang: this.getLanguage(),
@@ -387,6 +388,91 @@ class IssuesViewProvider {
         const reviewed = this.getReviewedIds().filter(x => x !== id);
         await this._context.globalState.update('reviewedSessionIds_v2', reviewed);
     }
+    static groupSessionsByTaskStream(sessions) {
+        if (!sessions || sessions.length <= 1) {
+            return sessions ? [...sessions] : [];
+        }
+        const defaultBranches = new Set(['main', 'master', 'head', 'dev', 'develop']);
+        // Build tags for each session: issue:<repo>:<normIssue> or branch:<repo>:<branch>
+        const sessionTags = sessions.map(s => {
+            const tags = [];
+            const repo = (s.repo || '').toLowerCase();
+            if (s.issueId) {
+                const normIssue = s.issueId.startsWith('#') ? s.issueId.toLowerCase() : `#${s.issueId.toLowerCase()}`;
+                tags.push(`issue:${repo}:${normIssue}`);
+            }
+            if (s.branch) {
+                const b = s.branch.toLowerCase();
+                if (!defaultBranches.has(b)) {
+                    tags.push(`branch:${repo}:${b}`);
+                }
+            }
+            return tags;
+        });
+        // Disjoint Set Union (DSU) by session index
+        const parent = sessions.map((_, i) => i);
+        function find(i) {
+            if (parent[i] === i)
+                return i;
+            parent[i] = find(parent[i]);
+            return parent[i];
+        }
+        function union(i, j) {
+            const rootI = find(i);
+            const rootJ = find(j);
+            if (rootI !== rootJ) {
+                parent[rootI] = rootJ;
+            }
+        }
+        // Map tag -> first session index that had this tag
+        const tagToFirstIndex = new Map();
+        for (let i = 0; i < sessions.length; i++) {
+            for (const tag of sessionTags[i]) {
+                if (tagToFirstIndex.has(tag)) {
+                    union(i, tagToFirstIndex.get(tag));
+                }
+                else {
+                    tagToFirstIndex.set(tag, i);
+                }
+            }
+        }
+        // Group sessions by their root
+        const rootGroups = new Map();
+        for (let i = 0; i < sessions.length; i++) {
+            if (sessionTags[i].length === 0) {
+                // Unidentified session: keep independent
+                rootGroups.set(-1 - i, [sessions[i]]);
+            }
+            else {
+                const root = find(i);
+                if (!rootGroups.has(root)) {
+                    rootGroups.set(root, []);
+                }
+                rootGroups.get(root).push(sessions[i]);
+            }
+        }
+        const result = [];
+        for (const [, list] of rootGroups) {
+            if (list.length === 1) {
+                result.push(list[0]);
+            }
+            else {
+                list.sort((a, b) => b.updatedAt - a.updatedAt);
+                const primary = { ...list[0] };
+                // If primary is missing issueId but an earlier continuation session had it, inherit it
+                if (!primary.issueId) {
+                    const withIssue = list.find(item => !!item.issueId);
+                    if (withIssue) {
+                        primary.issueId = withIssue.issueId;
+                    }
+                }
+                primary.subSessions = list.slice(1);
+                result.push(primary);
+            }
+        }
+        result.sort((a, b) => b.updatedAt - a.updatedAt);
+        return result;
+    }
     async refresh() {
         const config = vscode.workspace.getConfiguration('claudeSessionManager');
         const customPath = config.get('storagePath');
@@ -404,6 +490,7 @@ class IssuesViewProvider {
             defaultRepo: defaultRepo || undefined
         });
         this._lastSessions = sessions;
+        const groupedSessions = IssuesViewProvider.groupSessionsByTaskStream(sessions);
         if (this._currentWorktreeFilter) {
             const hasBranchInSessions = sessions.some(s => s.branch === this._currentWorktreeFilter && (!s.cwd || fs.existsSync(s.cwd)));
             const discovered = scanner_1.SessionScanner.discoverWorkspaceWorktrees(wsFolders);
@@ -414,10 +501,10 @@ class IssuesViewProvider {
         }
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
-        const needAcceptCount = sessions.filter(s => s.status === 'need_accept').length;
-        const runningCount = sessions.filter(s => s.status === 'running').length;
-        const failedCount = sessions.filter(s => s.status === 'failed' && s.updatedAt >= startOfToday.getTime()).length;
-        const needReviewCount = sessions.filter(s => s.status === 'done' && !this.getReviewedIds().includes(s.id) && s.updatedAt >= startOfToday.getTime()).length;
+        const needAcceptCount = groupedSessions.filter(s => s.status === 'need_accept').length;
+        const runningCount = groupedSessions.filter(s => s.status === 'running').length;
+        const failedCount = groupedSessions.filter(s => s.status === 'failed' && s.updatedAt >= startOfToday.getTime()).length;
+        const needReviewCount = groupedSessions.filter(s => s.status === 'done' && !this.getReviewedIds().includes(s.id) && s.updatedAt >= startOfToday.getTime()).length;
         const lang = this.getLanguage();
         const currentWorkspace = this.getCurrentWorkspace();
         for (const view of this._views) {
@@ -444,7 +531,7 @@ class IssuesViewProvider {
             }
             view.webview.postMessage({
                 type: 'updateSessions',
-                sessions,
+                sessions: groupedSessions,
                 reviewedIds: this.getReviewedIds(),
                 currentWorkspace,
                 lang,
@@ -452,7 +539,7 @@ class IssuesViewProvider {
                 hasWorktrees: this.checkHasWorktrees()
             });
         }
-        const todayCount = sessions.filter(s => s.updatedAt >= startOfToday.getTime()).length;
+        const todayCount = groupedSessions.filter(s => s.updatedAt >= startOfToday.getTime()).length;
         const activeTotalCount = needAcceptCount + runningCount + failedCount + needReviewCount;
         const md = new vscode.MarkdownString('', true);
         md.isTrusted = true;
@@ -477,7 +564,7 @@ class IssuesViewProvider {
             md.appendMarkdown(`---\n\n`);
             md.appendMarkdown(`**Quick switch tab:**\n\n`);
             md.appendMarkdown(`* [$(calendar) **Today** (${todayCount})](command:claudeSessionManager.openTab?%22today%22)\n`);
-            md.appendMarkdown(`* [$(list-unordered) **All Sessions** (${sessions.length})](command:claudeSessionManager.openTab?%22all%22)\n\n`);
+            md.appendMarkdown(`* [$(list-unordered) **All Sessions** (${groupedSessions.length})](command:claudeSessionManager.openTab?%22all%22)\n\n`);
             md.appendMarkdown(`---\n\n`);
             md.appendMarkdown(`[$(gear) Settings](command:claudeSessionManager.openSettings) &nbsp;|&nbsp; [$(refresh) Refresh](command:claudeSessionManager.refresh)`);
         }
@@ -501,7 +588,7 @@ class IssuesViewProvider {
             md.appendMarkdown(`---\n\n`);
             md.appendMarkdown(`**Chuyển nhanh đến tab:**\n\n`);
             md.appendMarkdown(`* [$(calendar) **Hôm nay** (${todayCount})](command:claudeSessionManager.openTab?%22today%22)\n`);
-            md.appendMarkdown(`* [$(list-unordered) **Tất cả các ngày** (${sessions.length})](command:claudeSessionManager.openTab?%22all%22)\n\n`);
+            md.appendMarkdown(`* [$(list-unordered) **Tất cả các ngày** (${groupedSessions.length})](command:claudeSessionManager.openTab?%22all%22)\n\n`);
             md.appendMarkdown(`---\n\n`);
             md.appendMarkdown(`[$(gear) Cài đặt](command:claudeSessionManager.openSettings) &nbsp;|&nbsp; [$(refresh) Làm mới](command:claudeSessionManager.refresh)`);
         }
@@ -1439,6 +1526,154 @@ class IssuesViewProvider {
       flex-shrink: 0;
     }
 
+    .sub-sessions-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-size: 10.5px;
+      font-weight: 500;
+      background: rgba(148, 163, 184, 0.12);
+      color: var(--text-muted);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .sub-sessions-toggle:hover {
+      background: rgba(148, 163, 184, 0.22);
+      color: var(--text-main);
+      border-color: rgba(148, 163, 184, 0.35);
+    }
+    .sub-sessions-toggle.active {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: rgba(59, 130, 246, 0.35);
+      color: #60a5fa;
+    }
+    body.vscode-light .sub-sessions-toggle.active {
+      color: #2563eb;
+    }
+
+    .sub-sessions-list {
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed var(--card-border);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .sub-session-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.14);
+      font-size: 11px;
+      color: var(--text-muted);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      transition: background 0.15s ease;
+      cursor: pointer;
+    }
+    body.vscode-light .sub-session-item {
+      background: rgba(0, 0, 0, 0.03);
+      border-color: rgba(0, 0, 0, 0.05);
+    }
+    .sub-session-item:hover {
+      background: rgba(148, 163, 184, 0.14);
+    }
+    .sub-session-left {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+    }
+    .sub-session-right {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .sub-session-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 9.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .sub-session-badge.failed {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+    }
+    .sub-session-badge.done {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+    }
+    .sub-session-badge.running {
+      background: rgba(59, 130, 246, 0.15);
+      color: #3b82f6;
+    }
+    .sub-session-badge.need_accept {
+      background: rgba(245, 158, 11, 0.15);
+      color: #f59e0b;
+    }
+    .sub-session-time {
+      font-weight: 500;
+      color: var(--text-main);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .sub-session-meta {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 10.5px;
+    }
+    .sub-session-short-id {
+      font-family: monospace;
+      font-size: 10px;
+      color: var(--short-id-fg);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .sub-session-btn {
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 3px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px 6px;
+      font-size: 10.5px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      transition: all 0.15s ease;
+    }
+    .sub-session-btn:hover {
+      background: var(--btn-hover);
+      color: #ffffff;
+      border-color: var(--btn-hover);
+    }
+    .sub-session-btn.delete {
+      padding: 2px 4px;
+    }
+    .sub-session-btn.delete:hover {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      border-color: rgba(239, 68, 68, 0.35);
+    }
+
     .card-actions {
       display: flex;
       justify-content: flex-end;
@@ -1557,6 +1792,7 @@ class IssuesViewProvider {
     const savedState = vscode.getState() || {};
     let allSessions = Array.isArray(savedState.sessions) ? savedState.sessions : [];
     let reviewedIds = new Set(Array.isArray(savedState.reviewedIds) ? savedState.reviewedIds : []);
+    let expandedGroupIds = new Set(Array.isArray(savedState.expandedGroupIds) ? savedState.expandedGroupIds : []);
     let currentFilter = (savedState.currentFilter === 'all') ? 'all' : 'today';
     let currentWorkspace = savedState.currentWorkspace || null;
     let currentWorktree = savedState.currentWorktree || null;
@@ -1638,6 +1874,7 @@ class IssuesViewProvider {
       vscode.setState({
         sessions: allSessions,
         reviewedIds: Array.from(reviewedIds),
+        expandedGroupIds: Array.from(expandedGroupIds),
         currentFilter,
         currentWorkspace,
         currentWorktree,
@@ -1682,7 +1919,15 @@ class IssuesViewProvider {
 
     function openSession(id) {
       if (id) {
-        const s = allSessions.find(item => item.id === id);
+        let s = allSessions.find(item => item.id === id);
+        if (!s) {
+          for (const p of allSessions) {
+            if (Array.isArray(p.subSessions)) {
+              const found = p.subSessions.find(item => item.id === id);
+              if (found) { s = found; break; }
+            }
+          }
+        }
         if (s && s.isNeedReview) {
           reviewedIds.add(id);
           saveState();
@@ -1781,6 +2026,64 @@ class IssuesViewProvider {
         (s.isWorktree ? '<span class="worktree-badge" data-action="filter-worktree" data-branch="' + escapeHtml(s.branch) + '" title="' + (currentLang === 'en' ? 'Git Worktree: ' : 'Git Worktree: ') + escapeHtml(s.branch) + '">worktree</span>' : '')
       ) : '';
 
+      let subSessionsToggle = '';
+      let subSessionsListHtml = '';
+      if (Array.isArray(s.subSessions) && s.subSessions.length > 0) {
+        const isExpanded = expandedGroupIds.has(s.id);
+        const subCount = s.subSessions.length;
+        const toggleIcon = isExpanded ? '▴' : '▾';
+        const toggleLabel = currentLang === 'en'
+          ? (toggleIcon + ' ' + subCount + ' earlier')
+          : (toggleIcon + ' ' + subCount + ' phiên trước');
+
+        subSessionsToggle = '<button class="sub-sessions-toggle ' + (isExpanded ? 'active' : '') + '" data-action="toggle-sub-sessions" data-group-id="' + s.id + '" title="' + (currentLang === 'en' ? 'Click to show/hide earlier sessions' : 'Bấm để xem/ẩn các phiên trước') + '">' +
+          toggleLabel +
+        '</button>';
+
+        if (isExpanded) {
+          let itemsHtml = '';
+          for (const sub of s.subSessions) {
+            let subBadge = '';
+            if (sub.status === 'failed') {
+              subBadge = '<span class="sub-session-badge failed">' + (sub.errorDetail ? escapeHtml(sub.errorDetail) : (currentLang === 'en' ? 'Limit/Err' : 'Lỗi')) + '</span>';
+            } else if (sub.status === 'done') {
+              subBadge = '<span class="sub-session-badge done">' + (currentLang === 'en' ? 'Done' : 'Xong') + '</span>';
+            } else if (sub.status === 'running') {
+              subBadge = '<span class="sub-session-badge running">' + (currentLang === 'en' ? 'Run' : 'Chạy') + '</span>';
+            } else if (sub.status === 'need_accept') {
+              subBadge = '<span class="sub-session-badge need_accept">' + (currentLang === 'en' ? 'Wait' : 'Chờ') + '</span>';
+            }
+
+            const promptSnippet = sub.lastUserPrompt ? escapeHtml(sub.lastUserPrompt.replace(/^>\s*/, '').slice(0, 80)) : '';
+            const subTitleTooltip = promptSnippet ? ('&gt; ' + promptSnippet) : (sub.title || sub.id);
+
+            itemsHtml += '<div class="sub-session-item" data-action="open" data-id="' + sub.id + '" title="' + subTitleTooltip + '">' +
+              '<div class="sub-session-left">' +
+                subBadge +
+                '<span class="sub-session-time">' + escapeHtml(sub.statusMessage) + '</span>' +
+                '<span style="opacity: 0.35;">•</span>' +
+                '<span class="sub-session-meta">' + escapeHtml(sub.modelName || 'Claude') + '</span>' +
+                (sub.costUSD ? ('<span style="opacity: 0.35;">•</span><span style="color: #10b981; font-weight: 500;">' + escapeHtml(sub.costUSD) + '</span>') : '') +
+                (sub.turnCount ? ('<span style="opacity: 0.35;">•</span><span>' + sub.turnCount + 't</span>') : '') +
+              '</div>' +
+              '<div class="sub-session-right">' +
+                '<span class="sub-session-short-id">' + escapeHtml(sub.shortId) + '</span>' +
+                '<button class="sub-session-btn" data-action="open" data-id="' + sub.id + '" title="' + (currentLang === 'en' ? 'Open earlier session' : 'Mở phiên trước này') + '">' +
+                  (currentLang === 'en' ? 'Open' : 'Mở') +
+                '</button>' +
+                '<button class="sub-session-btn delete" data-action="delete" data-id="' + sub.id + '" data-title="' + escapeHtml(sub.title || sub.id) + '" data-path="' + encodeURIComponent(sub.filePath || '') + '" title="' + t('btnDelete') + '">' +
+                  '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                    '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
+                  '</svg>' +
+                '</button>' +
+              '</div>' +
+            '</div>';
+          }
+
+          subSessionsListHtml = '<div class="sub-sessions-list">' + itemsHtml + '</div>';
+        }
+      }
+
       const footerMetaRow = '<div class="footer-meta-row">' +
         '<div class="footer-stats-row">' +
           '<span class="footer-meta-item">' + escapeHtml(s.statusMessage) + '</span>' +
@@ -1795,7 +2098,7 @@ class IssuesViewProvider {
           '<span class="footer-meta-item" title="Số lượt trao đổi hội thoại">' + (s.turnCount || 0) + ' turns</span>' +
         '</div>' +
         '<div class="footer-bottom-row">' +
-          '<div class="footer-bottom-left">' + branchFooterItem + '</div>' +
+          '<div class="footer-bottom-left">' + branchFooterItem + subSessionsToggle + '</div>' +
           '<span class="footer-meta-item short-id">' + escapeHtml(s.shortId) + '</span>' +
         '</div>' +
       '</div>';
@@ -1849,6 +2152,7 @@ class IssuesViewProvider {
         '</div>' +
         (s.lastUserPrompt ? '<div class="user-prompt">&gt; ' + escapeHtml(s.lastUserPrompt.replace(/^>\s*/, '')) + '</div>' : '') +
         footerMetaRow +
+        subSessionsListHtml +
       '</div>';
       } catch (err) {
         console.error('Error rendering card for session:', s, err);
@@ -1927,6 +2231,15 @@ class IssuesViewProvider {
           todayTotalTokens += (s.totalTokens || 0);
           todayInTokens += (s.rawInputTokens || 0);
           todayOutTokens += (s.rawOutputTokens || 0);
+          if (Array.isArray(s.subSessions)) {
+            s.subSessions.forEach(sub => {
+              if (sub.updatedAt >= startOfToday.getTime()) {
+                todayTotalTokens += (sub.totalTokens || 0);
+                todayInTokens += (sub.rawInputTokens || 0);
+                todayOutTokens += (sub.rawOutputTokens || 0);
+              }
+            });
+          }
         });
 
         function formatTokensSimple(n) {
@@ -1985,13 +2298,24 @@ class IssuesViewProvider {
         if (query) {
           // Khi tìm kiếm: tự động tìm kiếm trên TOÀN BỘ lịch sử sessions (không bị giới hạn bởi tab)
           filtered = filtered.filter(s => {
-            return (
+            const matchSelf = (
               (s.title && s.title.toLowerCase().includes(query)) ||
               (s.issueId && s.issueId.toLowerCase().includes(query)) ||
               (s.repo && s.repo.toLowerCase().includes(query)) ||
               (s.branch && s.branch.toLowerCase().includes(query)) ||
               (s.lastUserPrompt && s.lastUserPrompt.toLowerCase().includes(query))
             );
+            if (matchSelf) return true;
+            if (Array.isArray(s.subSessions)) {
+              return s.subSessions.some(sub => (
+                (sub.title && sub.title.toLowerCase().includes(query)) ||
+                (sub.issueId && sub.issueId.toLowerCase().includes(query)) ||
+                (sub.repo && sub.repo.toLowerCase().includes(query)) ||
+                (sub.branch && sub.branch.toLowerCase().includes(query)) ||
+                (sub.lastUserPrompt && sub.lastUserPrompt.toLowerCase().includes(query))
+              ));
+            }
+            return false;
           });
         } else {
           // Khi không tìm kiếm: áp dụng tab lọc đang chọn
@@ -2229,7 +2553,23 @@ class IssuesViewProvider {
           return;
         }
 
+        if (action === 'toggle-sub-sessions') {
+          e.stopPropagation();
+          const groupId = actionEl.getAttribute('data-group-id');
+          if (groupId) {
+            if (expandedGroupIds.has(groupId)) {
+              expandedGroupIds.delete(groupId);
+            } else {
+              expandedGroupIds.add(groupId);
+            }
+            saveState();
+            renderSessions();
+          }
+          return;
+        }
+
         if (action === 'open') {
+          e.stopPropagation();
           if (id) {
             openSession(id);
           }

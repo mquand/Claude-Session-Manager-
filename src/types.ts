@@ -27,6 +27,8 @@ export interface ClaudeSession {
   rawInputTokens?: number;
   rawOutputTokens?: number;
   totalTokens?: number;
+  subSessions?: ClaudeSession[];
+  isNeedReview?: boolean;
 }
 
 export interface ScanOptions {
