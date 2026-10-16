@@ -1257,6 +1257,12 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       width: 100%;
     }
 
+    .title-issue {
+      color: var(--issue-badge-fg, #60a5fa);
+      font-weight: 700;
+      margin-right: 3px;
+    }
+
     .card-top-row {
       display: flex;
       align-items: center;
@@ -1311,15 +1317,27 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
 
     .card-action-btn.btn-retry {
-      background: rgba(239, 68, 68, 0.12);
-      border-color: rgba(239, 68, 68, 0.35);
-      color: #f87171;
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.16);
+      color: var(--text-main);
     }
 
     .card-action-btn.btn-retry:hover {
-      background: rgba(239, 68, 68, 0.22);
-      border-color: rgba(239, 68, 68, 0.55);
-      color: #ffffff;
+      background: rgba(59, 130, 246, 0.12);
+      border-color: rgba(59, 130, 246, 0.45);
+      color: #93c5fd;
+    }
+
+    body.vscode-light .card-action-btn.btn-retry {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #334155;
+    }
+
+    body.vscode-light .card-action-btn.btn-retry:hover {
+      background: #eff6ff;
+      border-color: #93c5fd;
+      color: #1d4ed8;
     }
 
     .card-action-btn.btn-review {
@@ -1791,17 +1809,35 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         '</div>' +
       '</div>';
 
+      let cleanTitle = s.title || '';
+      let issueTag = '';
+      if (s.issueId) {
+        const normId = s.issueId.startsWith('#') ? s.issueId : ('#' + s.issueId);
+        issueTag = '[' + normId + ']';
+        cleanTitle = cleanTitle
+          .replace(new RegExp('^[\\[\\(]?' + normId.replace('#', '#?') + '[\\]\\)]?\\s*[:\\-]?\\s*', 'i'), '')
+          .replace(/^[\[\(]\s*[\]\)]\s*/, '')
+          .trim();
+        if (!cleanTitle) {
+          cleanTitle = s.title || normId;
+        }
+      }
+
+      const plainTitle = issueTag ? (issueTag + ' ' + cleanTitle) : cleanTitle;
+      const titleHtml = issueTag 
+        ? '<span class="title-issue">' + escapeHtml(issueTag) + '</span> ' + escapeHtml(cleanTitle)
+        : escapeHtml(cleanTitle);
+
       return '<div class="session-card ' + cardStatusClass + '" data-action="open" data-id="' + s.id + '">' +
         '<div class="card-top-row">' +
           '<div class="card-badges-wrap">' +
             '<span class="status-dot ' + dotClass + '"></span>' +
             '<span class="repo-badge">' + escapeHtml(s.repo) + '</span>' +
-            (s.issueId ? '<span class="issue-badge">' + escapeHtml(s.issueId) + '</span>' : '') +
             statusBadge +
           '</div>' +
           '<div class="card-top-actions">' +
             actionButtons +
-            '<button class="card-delete-btn" title="' + t('btnDelete') + '" data-action="delete" data-id="' + s.id + '" data-title="' + escapeHtml(s.title) + '" data-path="' + encodeURIComponent(s.filePath || '') + '">' +
+            '<button class="card-delete-btn" title="' + t('btnDelete') + '" data-action="delete" data-id="' + s.id + '" data-title="' + escapeHtml(plainTitle) + '" data-path="' + encodeURIComponent(s.filePath || '') + '">' +
               '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                 '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
               '</svg>' +
@@ -1809,7 +1845,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           '</div>' +
         '</div>' +
         '<div class="card-title-row">' +
-          '<span class="title-text" title="' + escapeHtml(s.title) + '">' + escapeHtml(s.title) + '</span>' +
+          '<span class="title-text" title="' + escapeHtml(plainTitle) + '">' + titleHtml + '</span>' +
         '</div>' +
         (s.lastUserPrompt ? '<div class="user-prompt">&gt; ' + escapeHtml(s.lastUserPrompt.replace(/^>\s*/, '')) + '</div>' : '') +
         footerMetaRow +

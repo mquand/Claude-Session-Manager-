@@ -703,8 +703,11 @@ export class SessionScanner {
 
       if (issueMatch) {
         issueId = issueMatch[0];
-        // Làm sạch title: Nếu trong title bị dính lặp lại "#5433" thì bỏ đi cho gọn
-        title = title.replace(/#\d+\s*/g, '').trim();
+        // Làm sạch title: Nếu trong title bị dính lặp lại "#5433" hoặc "[#5433]" thì bỏ đi cho gọn
+        title = title.replace(/[\[\(]?#\d+[\]\)]?\s*[:\-]?\s*/g, '').replace(/^[\[\(]\s*[\]\)]\s*/, '').trim();
+        if (!title) {
+          title = meaningfulFirstPrompt ? meaningfulFirstPrompt.split('\n')[0] : `Session ${sessionId.slice(0, 8)}`;
+        }
       }
 
       const diffMinutes = Math.floor((Date.now() - mtimeMs) / (60 * 1000));
