@@ -1316,24 +1316,17 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       vertical-align: bottom;
     }
 
-    .worktree-badge {
-      background: rgba(245, 158, 11, 0.15);
+    .branch-info.is-worktree {
       color: #d97706;
-      border: 1px solid rgba(245, 158, 11, 0.3);
-      padding: 1px 5px;
-      border-radius: 3px;
-      font-size: 9.5px;
-      font-weight: 600;
-      text-transform: uppercase;
-      flex-shrink: 0;
-      margin-left: 2px;
-      cursor: pointer;
-      transition: all 0.15s ease;
     }
-
-    .worktree-badge:hover {
-      background: rgba(245, 158, 11, 0.25);
-      border-color: rgba(245, 158, 11, 0.5);
+    body.vscode-dark .branch-info.is-worktree {
+      color: #f59e0b;
+    }
+    .branch-info.is-worktree .branch-name {
+      color: #d97706;
+    }
+    body.vscode-dark .branch-info.is-worktree .branch-name {
+      color: #fbbf24;
     }
 
     .issue-badge {
@@ -2081,9 +2074,9 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       }
       
       const branchFooterItem = s.branch ? (
-        '<span class="footer-meta-item branch-info" data-action="filter-worktree" data-branch="' + escapeHtml(s.branch) + '" title="' + (currentLang === 'en' ? 'Click to filter worktree: ' : 'Click để lọc theo worktree: ') + escapeHtml(s.branch) + '">' +
+        '<span class="footer-meta-item branch-info ' + (s.isWorktree ? 'is-worktree' : '') + '" data-action="filter-worktree" data-branch="' + escapeHtml(s.branch) + '" title="' + (s.isWorktree ? ((currentLang === 'en' ? 'Git Worktree: ' : 'Git Worktree: ') + escapeHtml(s.branch)) : ((currentLang === 'en' ? 'Click to filter branch: ' : 'Click để lọc theo branch: ') + escapeHtml(s.branch))) + '">' +
           '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>' +
-          'branch: <span class="branch-name">' + escapeHtml(s.branch) + '</span>' +
+          (s.isWorktree ? 'worktree: ' : 'branch: ') + '<span class="branch-name">' + escapeHtml(s.branch) + '</span>' +
         '</span>'
       ) : '';
 
@@ -2201,7 +2194,6 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           '<div class="card-badges-wrap">' +
             '<span class="status-dot ' + dotClass + '"></span>' +
             '<span class="repo-badge">' + escapeHtml(s.repo) + '</span>' +
-            (s.isWorktree ? '<span class="worktree-badge" data-action="filter-worktree" data-branch="' + escapeHtml(s.branch) + '" title="' + (currentLang === 'en' ? 'Git Worktree: ' : 'Git Worktree: ') + escapeHtml(s.branch) + '">worktree</span>' : '') +
             statusBadge +
           '</div>' +
           '<div class="card-top-actions">' +
