@@ -147,6 +147,13 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         }
         case 'markReviewed': {
           await this.addReviewedId(data.id);
+          const grouped = IssuesViewProvider.groupSessionsByTaskStream(this._lastSessions);
+          const target = grouped.find(s => s.id === data.id);
+          if (target && target.subSessions) {
+            for (const sub of target.subSessions) {
+              await this.addReviewedId(sub.id);
+            }
+          }
           await this.refresh();
           break;
         }
@@ -619,7 +626,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       } else if (failedCount > 0) {
         md.appendMarkdown(`$(error) **${failedCount} task bị limit hoặc lỗi**\n\n`);
       } else if (needReviewCount > 0) {
-        md.appendMarkdown(`$(eye) **${needReviewCount} task vừa xong cần review**\n\n`);
+        md.appendMarkdown(`$(eye) **${needReviewCount} task cần review**\n\n`);
       } else {
         md.appendMarkdown(`$(check) **Sẵn sàng (Idle)**\n\n`);
       }
@@ -1858,7 +1865,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         secNeedAccept: "CHỜ DUYỆT",
         secRunning: "ĐANG CHẠY",
         secFailed: "BỊ LIMIT / LỖI",
-        secNeedReview: "VỪA XONG (CẦN REVIEW)",
+        secNeedReview: "CẦN REVIEW",
         secDone: "ĐÃ HOÀN THÀNH",
         btnDiff: "Xem diff",
         btnApprove: "Duyệt",
@@ -1866,6 +1873,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         btnMarkReviewed: "Đã xem",
         btnRetry: "Mở thử lại",
         btnReviewAgain: "Review lại",
+        btnOpen: "Mở",
         btnDelete: "Xoá",
         btnDeleteTitle: "Xoá phiên hội thoại",
         noSessionsActive: "Hiện không có task nào đang chạy hoặc cần review.",
@@ -1885,7 +1893,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         secNeedAccept: "WAITING APPROVAL",
         secRunning: "RUNNING",
         secFailed: "LIMITED / FAILED",
-        secNeedReview: "FINISHED (NEED REVIEW)",
+        secNeedReview: "NEED REVIEW",
         secDone: "COMPLETED",
         btnDiff: "View Diff",
         btnApprove: "Approve",
@@ -1893,6 +1901,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         btnMarkReviewed: "Reviewed",
         btnRetry: "Retry",
         btnReviewAgain: "Review again",
+        btnOpen: "Open",
         btnDelete: "Delete",
         btnDeleteTitle: "Delete conversation session",
         noSessionsActive: "No tasks are currently running or waiting for review.",
@@ -1965,8 +1974,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
             }
           }
         }
-        if (s && s.isNeedReview) {
+        if (!reviewedIds.has(id) && (!s || s.status === 'done')) {
           reviewedIds.add(id);
+          if (s && Array.isArray(s.subSessions)) {
+            s.subSessions.forEach(sub => reviewedIds.add(sub.id));
+          }
           saveState();
           vscode.postMessage({ type: 'markReviewed', id });
           renderSessions();
@@ -2100,13 +2112,11 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
                 '<span class="sub-session-time">' + escapeHtml(sub.statusMessage) + '</span>' +
                 '<span style="opacity: 0.35;">•</span>' +
                 '<span class="sub-session-meta">' + escapeHtml(sub.modelName || 'Claude') + '</span>' +
-                (sub.costUSD ? ('<span style="opacity: 0.35;">•</span><span style="color: #10b981; font-weight: 500;">' + escapeHtml(sub.costUSD) + '</span>') : '') +
-                (sub.turnCount ? ('<span style="opacity: 0.35;">•</span><span>' + sub.turnCount + 't</span>') : '') +
+                (sub.costUSD ? ('<span style="opacity: 0.35;">•</span><span style="color: #10b981; font-weight: 600;">' + escapeHtml(sub.costUSD) + '</span>') : '') +
               '</div>' +
               '<div class="sub-session-right">' +
-                '<span class="sub-session-short-id">' + escapeHtml(sub.shortId) + '</span>' +
                 '<button class="sub-session-btn" data-action="open" data-id="' + sub.id + '" title="' + (currentLang === 'en' ? 'Open earlier session' : 'Mở phiên trước này') + '">' +
-                  (currentLang === 'en' ? 'Open' : 'Mở') +
+                  (t('btnOpen') || (currentLang === 'en' ? 'Open' : 'Mở')) +
                 '</button>' +
                 '<button class="sub-session-btn delete" data-action="delete" data-id="' + sub.id + '" data-title="' + escapeHtml(sub.title || sub.id) + '" data-path="' + encodeURIComponent(sub.filePath || '') + '" title="' + t('btnDelete') + '">' +
                   '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
@@ -2131,11 +2141,9 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           '<span style="opacity: 0.35;">•</span>' +
           '<span class="footer-meta-item token">out: ' + escapeHtml(s.outputTokensFormatted) + '</span>' +
           (s.costUSD ? '<span style="opacity: 0.35;">•</span><span class="footer-meta-item cost">' + escapeHtml(s.costUSD) + '</span>' : '') +
-          '<span style="opacity: 0.35;">•</span>' +
-          '<span class="footer-meta-item" title="Số lượt trao đổi hội thoại">' + (s.turnCount || 0) + ' turns</span>' +
         '</div>' +
         '<div class="footer-bottom-row">' +
-          '<div class="footer-bottom-left">' + branchFooterItem + subSessionsToggle + '</div>' +
+          '<div class="footer-bottom-left">' + branchFooterItem + '</div>' +
           '<span class="footer-meta-item short-id">' + escapeHtml(s.shortId) + '</span>' +
         '</div>' +
       '</div>';
@@ -2174,6 +2182,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
             '<span class="status-dot ' + dotClass + '"></span>' +
             '<span class="repo-badge">' + escapeHtml(s.repo) + '</span>' +
             statusBadge +
+            subSessionsToggle +
           '</div>' +
           '<div class="card-top-actions">' +
             actionButtons +
