@@ -8,6 +8,10 @@
 
 > Extension trực quan, siêu nhẹ và thời gian thực (real-time) giúp theo dõi, quản lý, phân loại và chuyển đổi nhanh giữa các session làm việc của **Claude Code** trực tiếp ngay trong VS Code. Hỗ trợ toàn diện cả **Issue/Ticket-based workflow (`#xxxx`)** lẫn **Chat tự do hàng ngày**.
 
+<p align="center">
+  <img src="resources/preview.png" alt="Claude Session Deck Preview" width="460" />
+</p>
+
 ---
 
 ## 💡 Vấn đề giải quyết
@@ -73,6 +77,14 @@ Ngay cạnh thanh tìm kiếm được tích hợp 2 nút thao tác nhanh:
 - Extension tự động kiểm tra phiên bản mới từ GitHub Releases mỗi khi khởi động VS Code (hoặc bấm nút **Tải xuống / Cập nhật** trên thanh công cụ).
 - Khi có phiên bản mới hơn trên GitHub, VS Code sẽ hiện thông báo kèm nút **[Cập nhật ngay]**.
 - Chỉ với **1 click**, extension sẽ tự tải file `.vsix` từ GitHub và tự động cài đè bản mới nhất vào máy của bạn, hoàn toàn không cần tải hay cài thủ công nữa!
+
+### 11. Hỗ trợ Git Worktrees & Quản lý nhánh
+- Tự động quét và phát hiện các Git worktree liên quan trong workspace và các repo con.
+- Menu dropdown lọc nhanh theo từng Worktree và hiển thị rõ ràng (`⑂ worktree: <tên nhánh>`).
+
+### 12. Gom nhóm phiên nối tiếp & Luồng Review trực quan
+- Khi Claude tự động tách phiên làm việc mới do hết token hoặc gián đoạn, extension tự động gom về một chuỗi duy nhất, cho phép mở rộng xem các phiên trước kèm tổng token.
+- Luồng review rõ ràng với nút **Review** và **Review lại** mang icon con mắt 👁 trực quan.
 
 ---
 

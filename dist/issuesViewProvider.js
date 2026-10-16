@@ -654,8 +654,8 @@ class IssuesViewProvider {
       --token-badge-bg: rgba(30, 35, 45, 0.7);
       --token-badge-border: rgba(255, 255, 255, 0.08);
       --token-badge-num: #38bdf8;
-      --repo-badge-bg: rgba(255, 255, 255, 0.05);
-      --repo-badge-fg: #94a3b8;
+      --repo-badge-bg: #252b38;
+      --repo-badge-fg: #93c5fd;
       --issue-badge-bg: #1e3a5f;
       --issue-badge-fg: #60a5fa;
       --branch-name-fg: #7dd3fc;
@@ -694,8 +694,8 @@ class IssuesViewProvider {
       --token-badge-bg: rgba(0, 0, 0, 0.05);
       --token-badge-border: rgba(0, 0, 0, 0.1);
       --token-badge-num: #0284c7;
-      --repo-badge-bg: #f1f5f9;
-      --repo-badge-fg: #475569;
+      --repo-badge-bg: #e0f2fe;
+      --repo-badge-fg: #0369a1;
       --issue-badge-bg: #dbeafe;
       --issue-badge-fg: #1d4ed8;
       --branch-name-fg: #0284c7;
@@ -1239,13 +1239,17 @@ class IssuesViewProvider {
     .repo-badge {
       background: var(--repo-badge-bg);
       color: var(--repo-badge-fg);
-      border: 1px solid var(--pill-border);
+      border: 1px solid rgba(147, 197, 253, 0.25);
       padding: 1px 6px;
       border-radius: 4px;
       font-size: 11px;
-      font-weight: 500;
+      font-weight: 600;
       font-family: monospace;
       flex-shrink: 0;
+    }
+
+    body.vscode-light .repo-badge {
+      border-color: rgba(3, 105, 161, 0.25);
     }
 
     .branch-info {
@@ -1284,12 +1288,6 @@ class IssuesViewProvider {
     }
     body.vscode-dark .branch-info.is-worktree {
       color: #f59e0b;
-    }
-    .branch-info.is-worktree .branch-name {
-      color: #d97706;
-    }
-    body.vscode-dark .branch-info.is-worktree .branch-name {
-      color: #fbbf24;
     }
 
     .issue-badge {
@@ -1407,6 +1405,18 @@ class IssuesViewProvider {
     .card-action-btn.btn-review:hover {
       background: rgba(168, 85, 247, 0.25);
       border-color: rgba(168, 85, 247, 0.5);
+    }
+
+    .card-action-btn.btn-review-again:hover {
+      background: rgba(168, 85, 247, 0.12);
+      border-color: rgba(168, 85, 247, 0.4);
+      color: #c084fc;
+    }
+
+    body.vscode-light .card-action-btn.btn-review-again:hover {
+      background: #faf5ff;
+      border-color: #d8b4fe;
+      color: #7e22ce;
     }
 
     .card-action-btn.btn-approve {
@@ -2016,8 +2026,8 @@ class IssuesViewProvider {
           '</button>';
       } else if (s.status === 'done') {
         actionButtons =
-          '<button class="card-action-btn" data-action="unmark-reviewed" data-id="' + s.id + '" title="' + t('btnReviewAgain') + '">' +
-            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>' +
+          '<button class="card-action-btn btn-review-again" data-action="unmark-reviewed" data-id="' + s.id + '" title="' + t('btnReviewAgain') + '">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>' +
             '<span>' + t('btnReviewAgain') + '</span>' +
           '</button>';
       }

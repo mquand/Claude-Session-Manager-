@@ -8,6 +8,10 @@
 
 > A fast, lightweight, and real-time VS Code extension to monitor, organize, categorize, and switch between **Claude Code** sessions effortlessly. Seamlessly supports both **Issue/Ticket-based workflows (`#xxxx`)** and **free-form ad-hoc chats**.
 
+<p align="center">
+  <img src="resources/preview.png" alt="Claude Session Deck Preview" width="460" />
+</p>
+
 ---
 
 ## 💡 Why Claude Session Manager?
@@ -73,6 +77,14 @@ Located right beside the search input:
 - The extension automatically checks GitHub Releases for newer releases when VS Code launches (or when you click the **Update** toolbar icon).
 - When a newer release is published, a notification appears with a **[Update Now]** button.
 - With **a single click**, it automatically downloads the `.vsix` package and installs it directly into VS Code, eliminating manual downloads!
+
+### 11. Git Worktrees & Branch Management
+- Automatically discovers all local Git worktrees across workspace repositories.
+- Dedicated Worktree dropdown filter and intuitive branch tags (`⑂ worktree: <branch>`).
+
+### 12. Smart Continuation Grouping & Review Flow
+- When Claude splits sessions due to context limits or timeouts, it automatically groups them cleanly under one stream with expandable earlier sessions and token counts.
+- Dedicated review flow with intuitive inspection actions (**Review** & **Review lại**) using eye icons 👁.
 
 ---
 
