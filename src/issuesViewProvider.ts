@@ -1028,19 +1028,13 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       background: var(--card-hover-bg);
     }
 
-    .card-header {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-    }
-
     .status-dot {
-      width: 8px;
-      height: 8px;
+      width: 7.5px;
+      height: 7.5px;
       border-radius: 50%;
-      margin-top: 6px;
       flex-shrink: 0;
       display: inline-block;
+      margin-right: 2px;
     }
 
     .dot-need_accept {
@@ -1173,20 +1167,6 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       background-color: var(--running);
     }
 
-    .card-top-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 6px;
-      margin-bottom: 6px;
-    }
-
-    .card-badges-wrap {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
 
     .card-title-row {
       display: flex;
@@ -1277,30 +1257,115 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       width: 100%;
     }
 
-    .card-delete-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      padding: 2px 4px;
-      border-radius: 4px;
+    .card-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .card-badges-wrap {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      opacity: 0;
-      transition: all 0.15s ease;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .card-top-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       flex-shrink: 0;
       margin-left: auto;
     }
 
-    .session-card:hover .card-delete-btn {
-      opacity: 0.6;
+    .card-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      color: var(--text-main);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      height: 24px;
+      box-sizing: border-box;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      user-select: none;
+      line-height: 1;
+    }
+
+    .card-action-btn:hover {
+      background: var(--pill-hover-bg);
+      border-color: var(--card-hover-border);
+    }
+
+    .card-action-btn svg {
+      flex-shrink: 0;
+    }
+
+    .card-action-btn.btn-retry {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.35);
+      color: #f87171;
+    }
+
+    .card-action-btn.btn-retry:hover {
+      background: rgba(239, 68, 68, 0.22);
+      border-color: rgba(239, 68, 68, 0.55);
+      color: #ffffff;
+    }
+
+    .card-action-btn.btn-review {
+      background: rgba(168, 85, 247, 0.15);
+      border-color: rgba(168, 85, 247, 0.35);
+      color: #c084fc;
+    }
+
+    .card-action-btn.btn-review:hover {
+      background: rgba(168, 85, 247, 0.25);
+      border-color: rgba(168, 85, 247, 0.5);
+    }
+
+    .card-action-btn.btn-approve {
+      background: #2563eb;
+      border-color: #1d4ed8;
+      color: #ffffff;
+    }
+
+    .card-action-btn.btn-approve:hover {
+      background: #1d4ed8;
+    }
+
+    .card-delete-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #ef4444;
+      border-radius: 6px;
+      cursor: pointer;
+      padding: 0;
+      flex-shrink: 0;
+      opacity: 0.85;
+      transition: all 0.15s ease;
+      box-sizing: border-box;
     }
 
     .card-delete-btn:hover {
-      opacity: 1 !important;
-      color: #ef4444;
-      background: rgba(239, 68, 68, 0.15);
+      opacity: 1;
+      background: rgba(239, 68, 68, 0.22);
+      border-color: rgba(239, 68, 68, 0.55);
+      color: #f87171;
     }
 
     .user-prompt {
@@ -1520,9 +1585,12 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         secNeedReview: "VỪA XONG (CẦN REVIEW)",
         secDone: "ĐÃ HOÀN THÀNH",
         btnDiff: "Xem diff",
-        btnApprove: "Duyệt & Chạy",
+        btnApprove: "Duyệt",
         btnReview: "Xem kết quả",
         btnMarkReviewed: "Đã xem",
+        btnRetry: "Mở thử lại",
+        btnReviewAgain: "Review lại",
+        btnDelete: "Xoá",
         btnDeleteTitle: "Xoá phiên hội thoại",
         noSessionsActive: "Hiện không có task nào đang chạy hoặc cần review.",
         noSessionsToday: "Không có task nào phát sinh trong ngày hôm nay.",
@@ -1544,9 +1612,12 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         secNeedReview: "FINISHED (NEED REVIEW)",
         secDone: "COMPLETED",
         btnDiff: "View Diff",
-        btnApprove: "Approve & Run",
+        btnApprove: "Approve",
         btnReview: "Review Result",
         btnMarkReviewed: "Reviewed",
+        btnRetry: "Retry",
+        btnReviewAgain: "Review again",
+        btnDelete: "Delete",
         btnDeleteTitle: "Delete conversation session",
         noSessionsActive: "No tasks are currently running or waiting for review.",
         noSessionsToday: "No sessions recorded for today.",
@@ -1646,23 +1717,37 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       
       let actionButtons = '';
       if (s.status === 'need_accept') {
-        actionButtons = '<div class="card-actions">' +
-          '<button class="btn btn-secondary" data-action="diff" data-id="' + s.id + '">' + t('btnDiff') + '</button>' +
-          '<button class="btn" data-action="approve" data-id="' + s.id + '">' + t('btnApprove') + '</button>' +
-          '</div>';
+        actionButtons =
+          '<button class="card-action-btn" data-action="diff" data-id="' + s.id + '" title="' + t('btnDiff') + '">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>' +
+            '<span>' + t('btnDiff') + '</span>' +
+          '</button>' +
+          '<button class="card-action-btn btn-approve" data-action="approve" data-id="' + s.id + '" title="' + t('btnApprove') + '">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>' +
+            '<span>' + t('btnApprove') + '</span>' +
+          '</button>';
       } else if (s.isNeedReview) {
-        actionButtons = '<div class="card-actions">' +
-          '<button class="btn btn-review" data-action="open" data-id="' + s.id + '">' + t('btnReview') + '</button>' +
-          '<button class="btn btn-secondary" data-action="mark-reviewed" data-id="' + s.id + '" title="' + t('btnMarkReviewed') + '">' + t('btnMarkReviewed') + '</button>' +
-          '</div>';
+        actionButtons =
+          '<button class="card-action-btn btn-review" data-action="open" data-id="' + s.id + '" title="' + t('btnReview') + '">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>' +
+            '<span>' + t('btnReview') + '</span>' +
+          '</button>' +
+          '<button class="card-action-btn" data-action="mark-reviewed" data-id="' + s.id + '" title="' + t('btnMarkReviewed') + '">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' +
+            '<span>' + t('btnMarkReviewed') + '</span>' +
+          '</button>';
       } else if (s.status === 'failed') {
-        actionButtons = '<div class="card-actions">' +
-          '<button class="btn btn-failed" data-action="open" data-id="' + s.id + '">' + (currentLang === 'en' ? 'Open & Retry' : 'Mở để thử lại') + '</button>' +
-          '</div>';
-      } else if (s.status === 'done' && currentFilter === 'today') {
-        actionButtons = '<div class="card-actions">' +
-          '<button class="btn btn-secondary" data-action="unmark-reviewed" data-id="' + s.id + '" title="' + (currentLang === 'en' ? 'Mark as Need Review' : 'Đánh dấu cần review lại') + '">' + (currentLang === 'en' ? 'Need review' : 'Review lại') + '</button>' +
-          '</div>';
+        actionButtons =
+          '<button class="card-action-btn btn-retry" data-action="open" data-id="' + s.id + '" title="' + t('btnRetry') + '">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>' +
+            '<span>' + t('btnRetry') + '</span>' +
+          '</button>';
+      } else if (s.status === 'done') {
+        actionButtons =
+          '<button class="card-action-btn" data-action="unmark-reviewed" data-id="' + s.id + '" title="' + t('btnReviewAgain') + '">' +
+            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>' +
+            '<span>' + t('btnReviewAgain') + '</span>' +
+          '</button>';
       }
 
       let statusBadge = '';
@@ -1707,29 +1792,27 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       '</div>';
 
       return '<div class="session-card ' + cardStatusClass + '" data-action="open" data-id="' + s.id + '">' +
-        '<div class="card-header">' +
-          '<span class="status-dot ' + dotClass + '"></span>' +
-          '<div style="flex: 1; min-width: 0;">' +
-            '<div class="card-top-row">' +
-              '<div class="card-badges-wrap">' +
-                '<span class="repo-badge">' + escapeHtml(s.repo) + '</span>' +
-                (s.issueId ? '<span class="issue-badge">' + escapeHtml(s.issueId) + '</span>' : '') +
-                statusBadge +
-              '</div>' +
-              '<button class="card-delete-btn" title="' + t('btnDeleteTitle') + '" data-action="delete" data-id="' + s.id + '" data-title="' + escapeHtml(s.title) + '" data-path="' + encodeURIComponent(s.filePath || '') + '">' +
-                '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-                  '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
-                '</svg>' +
-              '</button>' +
-            '</div>' +
-            '<div class="card-title-row">' +
-              '<span class="title-text" title="' + escapeHtml(s.title) + '">' + escapeHtml(s.title) + '</span>' +
-            '</div>' +
-            (s.lastUserPrompt ? '<div class="user-prompt">&gt; ' + escapeHtml(s.lastUserPrompt.replace(/^>\s*/, '')) + '</div>' : '') +
+        '<div class="card-top-row">' +
+          '<div class="card-badges-wrap">' +
+            '<span class="status-dot ' + dotClass + '"></span>' +
+            '<span class="repo-badge">' + escapeHtml(s.repo) + '</span>' +
+            (s.issueId ? '<span class="issue-badge">' + escapeHtml(s.issueId) + '</span>' : '') +
+            statusBadge +
+          '</div>' +
+          '<div class="card-top-actions">' +
             actionButtons +
-            footerMetaRow +
+            '<button class="card-delete-btn" title="' + t('btnDelete') + '" data-action="delete" data-id="' + s.id + '" data-title="' + escapeHtml(s.title) + '" data-path="' + encodeURIComponent(s.filePath || '') + '">' +
+              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
+              '</svg>' +
+            '</button>' +
           '</div>' +
         '</div>' +
+        '<div class="card-title-row">' +
+          '<span class="title-text" title="' + escapeHtml(s.title) + '">' + escapeHtml(s.title) + '</span>' +
+        '</div>' +
+        (s.lastUserPrompt ? '<div class="user-prompt">&gt; ' + escapeHtml(s.lastUserPrompt.replace(/^>\s*/, '')) + '</div>' : '') +
+        footerMetaRow +
       '</div>';
     }
 
