@@ -301,23 +301,19 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
 
     for (const item of sorted) {
       const exists = item.cwd ? fs.existsSync(item.cwd) : false;
-      // Nếu thư mục không còn tồn tại trên disk và không có session nào -> bỏ qua hoàn toàn
-      if (!exists && item.count === 0) {
+      // Chỉ lấy những git worktree thực tế vẫn còn tồn tại trên hệ thống
+      if (!exists) {
         continue;
       }
 
       const isCurrent = item.branch === this._currentWorktreeFilter;
       const checkMark = isCurrent ? '✓ ' : '';
-      let countDesc = item.count > 0 
+      const countDesc = item.count > 0 
         ? `${item.count} session${item.count > 1 ? 's' : ''}`
         : (lang === 'en' ? '$(circle-outline) No sessions yet (Ready)' : '$(circle-outline) Chưa có session (Sẵn sàng)');
 
-      if (!exists && item.count > 0) {
-        countDesc += lang === 'en' ? ' • (Folder deleted)' : ' • (Thư mục đã xoá)';
-      }
-
       items.push({
-        label: !exists && item.count > 0 ? `$(archive) ${checkMark}${item.branch}` : `$(git-branch) ${checkMark}${item.branch}`,
+        label: `$(git-branch) ${checkMark}${item.branch}`,
         description: `${countDesc}${item.repo ? ' • ' + item.repo : ''}`,
         detail: item.cwd ? (lang === 'en' ? `Directory: ${item.cwd}` : `Thư mục: ${item.cwd}`) : undefined,
         branch: item.branch
@@ -360,7 +356,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
   public checkHasWorktrees(): boolean {
     const wsFolders = vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) || [];
     const discovered = SessionScanner.discoverWorkspaceWorktrees(wsFolders);
-    return discovered.length > 0 || this._lastSessions.some(s => !!s.branch);
+    return discovered.length > 0 || this._lastSessions.some(s => !!s.branch && (!s.cwd || fs.existsSync(s.cwd)));
   }
 
   public setupRealtimeWatchers() {
@@ -434,7 +430,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     this._lastSessions = sessions;
 
     if (this._currentWorktreeFilter) {
-      const hasBranchInSessions = sessions.some(s => s.branch === this._currentWorktreeFilter);
+      const hasBranchInSessions = sessions.some(s => s.branch === this._currentWorktreeFilter && (!s.cwd || fs.existsSync(s.cwd)));
       const discovered = SessionScanner.discoverWorkspaceWorktrees(wsFolders);
       const hasBranchInWorktrees = discovered.some(w => w.branch === this._currentWorktreeFilter);
       if (!hasBranchInSessions && !hasBranchInWorktrees) {

@@ -2,7 +2,7 @@
   "name": "claude-session-deck",
   "displayName": "Claude Session & Issue Tracker",
   "description": "Track and manage Claude Code sessions, issues, token metrics, and git worktrees directly in VS Code / Theo dõi và quản lý phiên làm việc Claude trực tiếp trên VS Code",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "publisher": "mhquan",
   "author": "mhquan",
   "license": "MIT",
