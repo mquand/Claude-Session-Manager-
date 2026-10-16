@@ -1710,7 +1710,8 @@ class IssuesViewProvider {
     }
 
     function renderCard(s) {
-      const dotClass = 'dot-' + (s.isNeedReview ? 'need_review' : s.status);
+      try {
+        const dotClass = 'dot-' + (s.isNeedReview ? 'need_review' : s.status);
       const cardStatusClass = 'status-' + (s.isNeedReview ? 'need_review' : s.status);
       
       let actionButtons = '';
@@ -1789,18 +1790,27 @@ class IssuesViewProvider {
         '</div>' +
       '</div>';
 
-      let cleanTitle = s.title || '';
+      let cleanTitle = (s.title || '').trim();
       let issueTag = '';
       if (s.issueId) {
         const normId = s.issueId.startsWith('#') ? s.issueId : ('#' + s.issueId);
-        issueTag = '[' + normId + ']';
-        cleanTitle = cleanTitle
-          .replace(new RegExp('^[\\[\\(]?' + normId.replace('#', '#?') + '[\\]\\)]?\\s*[:\\-]?\\s*', 'i'), '')
-          .replace(/^[\[\(]\s*[\]\)]\s*/, '')
-          .trim();
+        if (cleanTitle.startsWith('[' + normId + ']')) {
+          cleanTitle = cleanTitle.substring(normId.length + 2).trim();
+        } else if (cleanTitle.startsWith('(' + normId + ')')) {
+          cleanTitle = cleanTitle.substring(normId.length + 2).trim();
+        } else if (cleanTitle.startsWith(normId)) {
+          cleanTitle = cleanTitle.substring(normId.length).trim();
+        }
+        if (cleanTitle.startsWith(':') || cleanTitle.startsWith('-')) {
+          cleanTitle = cleanTitle.substring(1).trim();
+        }
+        if (cleanTitle.startsWith('[]') || cleanTitle.startsWith('()')) {
+          cleanTitle = cleanTitle.substring(2).trim();
+        }
         if (!cleanTitle) {
           cleanTitle = s.title || normId;
         }
+        issueTag = '[' + normId + ']';
       }
 
       const plainTitle = issueTag ? (issueTag + ' ' + cleanTitle) : cleanTitle;
@@ -1830,6 +1840,10 @@ class IssuesViewProvider {
         (s.lastUserPrompt ? '<div class="user-prompt">&gt; ' + escapeHtml(s.lastUserPrompt.replace(/^>\s*/, '')) + '</div>' : '') +
         footerMetaRow +
       '</div>';
+      } catch (err) {
+        console.error('Error rendering card for session:', s, err);
+        return '';
+      }
     }
 
     function renderSessions() {
