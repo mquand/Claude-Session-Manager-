@@ -1367,23 +1367,35 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       justify-content: center;
       width: 24px;
       height: 24px;
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      color: #ef4444;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text-muted);
       border-radius: 6px;
       cursor: pointer;
       padding: 0;
       flex-shrink: 0;
-      opacity: 0.85;
+      opacity: 0.75;
       transition: all 0.15s ease;
       box-sizing: border-box;
     }
 
     .card-delete-btn:hover {
       opacity: 1;
-      background: rgba(239, 68, 68, 0.22);
-      border-color: rgba(239, 68, 68, 0.55);
-      color: #f87171;
+      background: rgba(239, 68, 68, 0.18);
+      border-color: rgba(239, 68, 68, 0.5);
+      color: #ef4444;
+    }
+
+    body.vscode-light .card-delete-btn {
+      background: rgba(0, 0, 0, 0.03);
+      border-color: rgba(0, 0, 0, 0.1);
+      color: #64748b;
+    }
+
+    body.vscode-light .card-delete-btn:hover {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.45);
+      color: #dc2626;
     }
 
     .user-prompt {
