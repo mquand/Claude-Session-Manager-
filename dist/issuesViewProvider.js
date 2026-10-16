@@ -416,6 +416,7 @@ class IssuesViewProvider {
         startOfToday.setHours(0, 0, 0, 0);
         const needAcceptCount = sessions.filter(s => s.status === 'need_accept').length;
         const runningCount = sessions.filter(s => s.status === 'running').length;
+        const failedCount = sessions.filter(s => s.status === 'failed' && s.updatedAt >= startOfToday.getTime()).length;
         const needReviewCount = sessions.filter(s => s.status === 'done' && !this.getReviewedIds().includes(s.id) && s.updatedAt >= startOfToday.getTime()).length;
         const lang = this.getLanguage();
         const currentWorkspace = this.getCurrentWorkspace();
@@ -424,6 +425,12 @@ class IssuesViewProvider {
                 view.badge = {
                     value: needAcceptCount,
                     tooltip: lang === 'en' ? `${needAcceptCount} tasks waiting approval` : `${needAcceptCount} task đang chờ duyệt`
+                };
+            }
+            else if (failedCount > 0) {
+                view.badge = {
+                    value: failedCount,
+                    tooltip: lang === 'en' ? `${failedCount} tasks limited or failed` : `${failedCount} task bị limit hoặc lỗi`
                 };
             }
             else if (needReviewCount > 0) {
@@ -446,7 +453,7 @@ class IssuesViewProvider {
             });
         }
         const todayCount = sessions.filter(s => s.updatedAt >= startOfToday.getTime()).length;
-        const activeTotalCount = needAcceptCount + runningCount + needReviewCount;
+        const activeTotalCount = needAcceptCount + runningCount + failedCount + needReviewCount;
         const md = new vscode.MarkdownString('', true);
         md.isTrusted = true;
         md.supportThemeIcons = true;
@@ -457,6 +464,9 @@ class IssuesViewProvider {
             }
             else if (runningCount > 0) {
                 md.appendMarkdown(`$(sync~spin) **${runningCount} tasks running**\n\n`);
+            }
+            else if (failedCount > 0) {
+                md.appendMarkdown(`$(error) **${failedCount} tasks limited or failed**\n\n`);
             }
             else if (needReviewCount > 0) {
                 md.appendMarkdown(`$(eye) **${needReviewCount} tasks need review**\n\n`);
@@ -479,6 +489,9 @@ class IssuesViewProvider {
             else if (runningCount > 0) {
                 md.appendMarkdown(`$(sync~spin) **${runningCount} task đang thực thi**\n\n`);
             }
+            else if (failedCount > 0) {
+                md.appendMarkdown(`$(error) **${failedCount} task bị limit hoặc lỗi**\n\n`);
+            }
             else if (needReviewCount > 0) {
                 md.appendMarkdown(`$(eye) **${needReviewCount} task vừa xong cần review**\n\n`);
             }
@@ -500,6 +513,10 @@ class IssuesViewProvider {
         else if (runningCount > 0) {
             this._statusBarItem.text = `$(sync~spin) Claude: ${runningCount} ${lang === 'en' ? 'Running' : 'Đang chạy'}`;
             this._statusBarItem.backgroundColor = undefined;
+        }
+        else if (failedCount > 0) {
+            this._statusBarItem.text = `$(error) Claude: ${failedCount} ${lang === 'en' ? 'Limited' : 'Bị limit'}`;
+            this._statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
         }
         else if (needReviewCount > 0) {
             this._statusBarItem.text = `$(eye) Claude: ${needReviewCount} ${lang === 'en' ? 'Review' : 'Cần review'}`;
@@ -555,6 +572,7 @@ class IssuesViewProvider {
       --done: #10b981;
       --running: #3b82f6;
       --need-review: #a855f7;
+      --failed: #ef4444;
     }
 
     body.vscode-light {
@@ -590,6 +608,11 @@ class IssuesViewProvider {
       --count-badge-bg: #e2e8f0;
       --count-badge-fg: #334155;
       --short-id-fg: #94a3b8;
+      --need-accept: #d97706;
+      --done: #059669;
+      --running: #2563eb;
+      --need-review: #9333ea;
+      --failed: #dc2626;
     }
 
     body.vscode-high-contrast {
@@ -964,6 +987,10 @@ class IssuesViewProvider {
       border-left-color: var(--running);
     }
 
+    .session-card.status-failed {
+      border-left-color: var(--failed);
+    }
+
     .session-card:hover {
       border-color: var(--card-hover-border);
       background: var(--card-hover-bg);
@@ -994,6 +1021,10 @@ class IssuesViewProvider {
 
     .dot-need_review {
       background-color: var(--need-review);
+    }
+
+    .dot-failed {
+      background-color: var(--failed);
     }
 
     .review-badge {
@@ -1070,6 +1101,14 @@ class IssuesViewProvider {
     body.vscode-dark .badge-done {
       color: #34d399;
     }
+    .badge-failed {
+      background: rgba(239, 68, 68, 0.18);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+    }
+    body.vscode-dark .badge-failed {
+      color: #f87171;
+    }
 
     .btn-review {
       background: #7c3aed;
@@ -1084,20 +1123,43 @@ class IssuesViewProvider {
     .btn-review:hover {
       background: #6d28d9;
     }
+    .btn-failed {
+      background: #dc2626;
+      color: #ffffff;
+      border: none;
+      border-radius: 3px;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-failed:hover {
+      background: #b91c1c;
+    }
 
     .dot-running {
       background-color: var(--running);
     }
 
-    .meta-row {
+    .card-top-row {
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      line-height: 1.5;
-      margin-bottom: 8px;
-      overflow: hidden;
-      white-space: nowrap;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .card-badges-wrap {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .card-title-row {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 5px;
     }
 
     .repo-badge {
@@ -1172,12 +1234,15 @@ class IssuesViewProvider {
 
     .title-text {
       font-weight: 600;
+      font-size: 13px;
       color: var(--text-main);
-      white-space: nowrap;
+      line-height: 1.45;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
       overflow: hidden;
-      text-overflow: ellipsis;
-      flex: 1;
-      min-width: 0;
+      word-break: break-word;
+      width: 100%;
     }
 
     .card-delete-btn {
@@ -1193,7 +1258,7 @@ class IssuesViewProvider {
       opacity: 0;
       transition: all 0.15s ease;
       flex-shrink: 0;
-      margin-left: 4px;
+      margin-left: auto;
     }
 
     .session-card:hover .card-delete-btn {
@@ -1208,9 +1273,9 @@ class IssuesViewProvider {
 
     .user-prompt {
       color: var(--text-muted);
-      font-size: 12px;
-      margin: 8px 0 10px 0;
-      line-height: 1.5;
+      font-size: 11.5px;
+      margin: 4px 0 8px 0;
+      line-height: 1.4;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -1401,6 +1466,7 @@ class IssuesViewProvider {
     let sectionState = savedState.sectionState || {
       need_accept: true,
       running: true,
+      failed: true,
       need_review: true,
       done: true
     };
@@ -1418,6 +1484,7 @@ class IssuesViewProvider {
         wsAll: "Tất cả dự án",
         secNeedAccept: "CHỜ DUYỆT",
         secRunning: "ĐANG CHẠY",
+        secFailed: "BỊ LIMIT / LỖI",
         secNeedReview: "VỪA XONG (CẦN REVIEW)",
         secDone: "ĐÃ HOÀN THÀNH",
         btnDiff: "Xem diff",
@@ -1441,6 +1508,7 @@ class IssuesViewProvider {
         wsAll: "All Projects",
         secNeedAccept: "WAITING APPROVAL",
         secRunning: "RUNNING",
+        secFailed: "LIMITED / FAILED",
         secNeedReview: "FINISHED (NEED REVIEW)",
         secDone: "COMPLETED",
         btnDiff: "View Diff",
@@ -1555,6 +1623,10 @@ class IssuesViewProvider {
           '<button class="btn btn-review" data-action="open" data-id="' + s.id + '">' + t('btnReview') + '</button>' +
           '<button class="btn btn-secondary" data-action="mark-reviewed" data-id="' + s.id + '" title="' + t('btnMarkReviewed') + '">' + t('btnMarkReviewed') + '</button>' +
           '</div>';
+      } else if (s.status === 'failed') {
+        actionButtons = '<div class="card-actions">' +
+          '<button class="btn btn-failed" data-action="open" data-id="' + s.id + '">' + (currentLang === 'en' ? 'Open & Retry' : 'Mở để thử lại') + '</button>' +
+          '</div>';
       } else if (s.status === 'done' && currentFilter === 'today') {
         actionButtons = '<div class="card-actions">' +
           '<button class="btn btn-secondary" data-action="unmark-reviewed" data-id="' + s.id + '" title="' + (currentLang === 'en' ? 'Mark as Need Review' : 'Đánh dấu cần review lại') + '">' + (currentLang === 'en' ? 'Need review' : 'Review lại') + '</button>' +
@@ -1566,6 +1638,9 @@ class IssuesViewProvider {
         statusBadge = '<span class="status-badge badge-need-accept">' + (currentLang === 'en' ? 'Need Approval' : 'Chờ duyệt') + '</span>';
       } else if (s.status === 'running') {
         statusBadge = '<span class="status-badge badge-running"><span class="pulse-dot"></span> ' + (currentLang === 'en' ? 'Running' : 'Đang chạy') + '</span>';
+      } else if (s.status === 'failed') {
+        const errLabel = s.errorDetail || (currentLang === 'en' ? 'Limit / Error' : 'Bị limit / Lỗi');
+        statusBadge = '<span class="status-badge badge-failed">' + escapeHtml(errLabel) + '</span>';
       } else if (s.isNeedReview) {
         statusBadge = '<span class="status-badge badge-need-review">' + (currentLang === 'en' ? 'Need Review' : 'Cần review') + '</span>';
       } else if (s.status === 'done') {
@@ -1603,16 +1678,20 @@ class IssuesViewProvider {
         '<div class="card-header">' +
           '<span class="status-dot ' + dotClass + '"></span>' +
           '<div style="flex: 1; min-width: 0;">' +
-            '<div class="meta-row">' +
-              '<span class="repo-badge">' + escapeHtml(s.repo) + '</span>' +
-              (s.issueId ? '<span class="issue-badge">' + escapeHtml(s.issueId) + '</span>' : '') +
-              statusBadge +
-              '<span class="title-text" title="' + escapeHtml(s.title) + '">' + escapeHtml(s.title) + '</span>' +
+            '<div class="card-top-row">' +
+              '<div class="card-badges-wrap">' +
+                '<span class="repo-badge">' + escapeHtml(s.repo) + '</span>' +
+                (s.issueId ? '<span class="issue-badge">' + escapeHtml(s.issueId) + '</span>' : '') +
+                statusBadge +
+              '</div>' +
               '<button class="card-delete-btn" title="' + t('btnDeleteTitle') + '" data-action="delete" data-id="' + s.id + '" data-title="' + escapeHtml(s.title) + '" data-path="' + encodeURIComponent(s.filePath || '') + '">' +
                 '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                   '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
                 '</svg>' +
               '</button>' +
+            '</div>' +
+            '<div class="card-title-row">' +
+              '<span class="title-text" title="' + escapeHtml(s.title) + '">' + escapeHtml(s.title) + '</span>' +
             '</div>' +
             (s.lastUserPrompt ? '<div class="user-prompt">&gt; ' + escapeHtml(s.lastUserPrompt.replace(/^>\s*/, '')) + '</div>' : '') +
             actionButtons +
@@ -1769,6 +1848,7 @@ class IssuesViewProvider {
 
         const needAcceptList = filtered.filter(s => s.status === 'need_accept');
         const runningList = filtered.filter(s => s.status === 'running');
+        const failedList = filtered.filter(s => s.status === 'failed');
         const needReviewList = filtered.filter(s => s.isNeedReview);
         const doneList = filtered.filter(s => s.status === 'done' && !s.isNeedReview);
 
@@ -1799,6 +1879,20 @@ class IssuesViewProvider {
           '</div>' +
           '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
           runningList.forEach(s => html += renderCard(s));
+          html += '</div>';
+        }
+
+        if (failedList.length > 0) {
+          const isOpen = query ? true : (sectionState.failed !== false);
+          html += '<div class="section-header" data-action="toggle-section" data-section="failed">' +
+            '<span class="chevron ' + (isOpen ? 'open' : 'closed') + '">' +
+              '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+            '</span>' +
+            '<span style="color: #ef4444; font-weight: 700;">' + t('secFailed') + '</span>' +
+            '<span class="count-badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171;">' + failedList.length + '</span>' +
+          '</div>' +
+          '<div class="section-content ' + (isOpen ? '' : 'collapsed') + '">';
+          failedList.forEach(s => html += renderCard(s));
           html += '</div>';
         }
 

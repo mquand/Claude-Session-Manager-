@@ -7,7 +7,7 @@ const os = require("os");
 const readline = require("readline");
 const child_process = require("child_process");
 class SessionScanner {
-    static CACHE_VERSION = 4;
+    static CACHE_VERSION = 5;
     static sessionCache = new Map();
     static deleteSession(sessionId, filePath) {
         try {
@@ -176,7 +176,9 @@ class SessionScanner {
             }
         }
         return sessions.sort((a, b) => {
-            const score = (s) => (s.status === 'running' ? 3 : s.status === 'need_accept' ? 2 : 1);
+            const score = (s) => (s.status === 'running' ? 4 :
+                s.status === 'need_accept' ? 3 :
+                    s.status === 'failed' ? 2 : 1);
             if (score(b) !== score(a)) {
                 return score(b) - score(a);
             }
@@ -391,6 +393,103 @@ class SessionScanner {
         }
         return results;
     }
+    static detectSessionError(item) {
+        if (!item)
+            return null;
+        // 1. Explicit error types in JSONL
+        if (item.type === 'error' || item.isError) {
+            const msg = typeof item.error === 'string'
+                ? item.error
+                : (item.error?.message || item.message || (item.error ? JSON.stringify(item.error) : ''));
+            return SessionScanner.categorizeErrorMessage(msg);
+        }
+        // 2. Anthropic API error object inside message
+        if (item.message?.error) {
+            const errObj = item.message.error;
+            const msg = typeof errObj === 'string' ? errObj : (errObj.message || errObj.type || JSON.stringify(errObj));
+            return SessionScanner.categorizeErrorMessage(msg);
+        }
+        // 3. Assistant text containing API / Gateway errors
+        if (item.type === 'assistant') {
+            let text = '';
+            const content = item.message?.content;
+            if (Array.isArray(content)) {
+                for (const part of content) {
+                    if (part.type === 'text' && typeof part.text === 'string') {
+                        text += part.text + '\n';
+                    }
+                }
+            }
+            else if (typeof content === 'string') {
+                text = content;
+            }
+            if (text) {
+                const trimmed = text.trim();
+                // Specific user proxy error
+                if (trimmed.includes('gãy hết tay rồi') || trimmed.includes('chạm cỏ thôi')) {
+                    return 'Lỗi 503';
+                }
+                // Pattern: "• API Error: 503", "API Error: 429", etc.
+                const apiErrorMatch = trimmed.match(/(?:•\s*)?API Error:\s*(\d+)/i);
+                if (apiErrorMatch) {
+                    const code = apiErrorMatch[1];
+                    if (code === '429')
+                        return 'Bị limit';
+                    if (code === '503')
+                        return 'Lỗi 503';
+                    if (code === '500')
+                        return 'Lỗi 500';
+                    if (code === '502' || code === '504')
+                        return `Lỗi ${code}`;
+                    if (code === '401' || code === '403')
+                        return 'Lỗi Auth';
+                    return `Lỗi ${code}`;
+                }
+                // Rate limit patterns
+                if (/rate[_\s-]?limit/i.test(trimmed) &&
+                    (trimmed.startsWith('•') || trimmed.includes('exceeded') || trimmed.includes('reached') || trimmed.includes('too many requests'))) {
+                    return 'Bị limit';
+                }
+                // Overloaded patterns
+                if (trimmed.includes('overloaded_error') ||
+                    /(?:•\s*)?(?:server|claude) is (?:currently )?overloaded/i.test(trimmed)) {
+                    return 'Lỗi 503';
+                }
+                // Token limit / context patterns
+                if (item.message?.stop_reason === 'max_tokens' ||
+                    /context[_\s-]?length[_\s-]?exceeded/i.test(trimmed) ||
+                    /prompt is too long/i.test(trimmed) ||
+                    /maximum context length/i.test(trimmed)) {
+                    return 'Hết token';
+                }
+                if (trimmed.startsWith('• API Error:') || trimmed.startsWith('API Error:')) {
+                    return 'Lỗi API';
+                }
+            }
+        }
+        return null;
+    }
+    static categorizeErrorMessage(msg) {
+        if (!msg)
+            return 'Lỗi API';
+        if (msg.includes('gãy hết tay rồi') || msg.includes('chạm cỏ thôi'))
+            return 'Lỗi 503';
+        if (msg.includes('503') || /overloaded/i.test(msg))
+            return 'Lỗi 503';
+        if (msg.includes('429') || /rate[_\s-]?limit/i.test(msg) || /too many requests/i.test(msg))
+            return 'Bị limit';
+        if (msg.includes('500'))
+            return 'Lỗi 500';
+        if (msg.includes('502'))
+            return 'Lỗi 502';
+        if (msg.includes('504'))
+            return 'Lỗi 504';
+        if (msg.includes('401') || msg.includes('403'))
+            return 'Lỗi Auth';
+        if (/context[_\s-]?length/i.test(msg) || /max_tokens/i.test(msg) || /token[_\s-]?limit/i.test(msg))
+            return 'Hết token';
+        return 'Lỗi API';
+    }
     static async fastParseSession(filePath, sessionId, mtimeMs, projectDir, activeInfo, options) {
         try {
             let title = '';
@@ -411,6 +510,7 @@ class SessionScanner {
             let lastCwd = '';
             let entrypoint = 'claude-vscode';
             let lastTurnHadToolUse = false;
+            let lastErrorDetail = '';
             let totalCostUSD = 0;
             let modelName = 'Opus 5.5';
             let hasCostState = false;
@@ -487,6 +587,7 @@ class SessionScanner {
                     if (item.type === 'user' && item.message?.content) {
                         turnCount++;
                         lastTurnHadToolUse = false;
+                        lastErrorDetail = '';
                         const content = item.message.content;
                         let fullText = '';
                         if (Array.isArray(content)) {
@@ -568,6 +669,18 @@ class SessionScanner {
                             lastTurnHadToolUse = false;
                         }
                     }
+                    const detectedErr = SessionScanner.detectSessionError(item);
+                    if (detectedErr) {
+                        lastErrorDetail = detectedErr;
+                        lastTurnHadToolUse = false;
+                    }
+                    else if (item.type === 'assistant' && !item.message?.error) {
+                        const content = item.message?.content;
+                        const hasContent = Array.isArray(content) ? content.length > 0 : !!content;
+                        if (hasContent) {
+                            lastErrorDetail = '';
+                        }
+                    }
                 }
                 catch { }
             }
@@ -632,44 +745,45 @@ class SessionScanner {
             // 1. Khi process OS đang 'running' / 'busy' / 'executing' -> Claude đang thực sự chạy (kể cả đang chạy tool ở auto mode) -> ĐANG CHẠY
             // 2. Khi process OS KHÔNG running (đang dừng/idle) VÀ lượt cuối gọi tool chưa có kết quả -> Claude đang dừng chờ người dùng phê duyệt -> CHỜ DUYỆT
             // 3. Khi process OS 'idle' và không có tool nào chờ duyệt -> ĐÃ HOÀN THÀNH
+            let timeAgo = 'vừa xong';
+            if (diffMinutes < 1) {
+                timeAgo = 'vừa xong';
+            }
+            else if (diffMinutes < 60) {
+                timeAgo = `${diffMinutes} phút trước`;
+            }
+            else if (diffMinutes < 1440) {
+                timeAgo = `${Math.floor(diffMinutes / 60)} giờ trước`;
+            }
+            else {
+                timeAgo = `${Math.floor(diffMinutes / 1440)} ngày trước`;
+            }
             if (activeInfo) {
                 if (activeInfo.status === 'running' || activeInfo.status === 'busy' || activeInfo.status === 'executing') {
                     status = 'running';
-                    statusMessage = 'đang chạy';
+                    statusMessage = timeAgo;
+                }
+                else if (lastErrorDetail) {
+                    status = 'failed';
+                    statusMessage = timeAgo;
                 }
                 else if (lastTurnHadToolUse) {
                     status = 'need_accept';
-                    statusMessage = 'chờ duyệt';
+                    statusMessage = timeAgo;
                 }
                 else {
                     status = 'done';
-                    if (diffMinutes < 1) {
-                        statusMessage = 'vừa xong';
-                    }
-                    else if (diffMinutes < 60) {
-                        statusMessage = `${diffMinutes} phút trước`;
-                    }
-                    else if (diffMinutes < 1440) {
-                        statusMessage = `${Math.floor(diffMinutes / 60)} giờ trước`;
-                    }
-                    else {
-                        statusMessage = `${Math.floor(diffMinutes / 1440)} ngày trước`;
-                    }
+                    statusMessage = timeAgo;
                 }
             }
             else {
-                status = 'done';
-                if (diffMinutes < 1) {
-                    statusMessage = 'vừa xong';
-                }
-                else if (diffMinutes < 60) {
-                    statusMessage = `${diffMinutes} phút trước`;
-                }
-                else if (diffMinutes < 1440) {
-                    statusMessage = `${Math.floor(diffMinutes / 60)} giờ trước`;
+                if (lastErrorDetail) {
+                    status = 'failed';
+                    statusMessage = timeAgo;
                 }
                 else {
-                    statusMessage = `${Math.floor(diffMinutes / 1440)} ngày trước`;
+                    status = 'done';
+                    statusMessage = timeAgo;
                 }
             }
             // Nếu lastCwd chưa có, giải mã từ projectDir
@@ -761,6 +875,7 @@ class SessionScanner {
                 isWorktree,
                 status,
                 statusMessage,
+                errorDetail: lastErrorDetail || undefined,
                 lastUserPrompt,
                 lastAssistantResponse: undefined,
                 updatedAt: mtimeMs,

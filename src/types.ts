@@ -13,6 +13,7 @@ export interface ClaudeSession {
   lastAssistantResponse?: string;
   updatedAt: number;
   filePath?: string;
+  errorDetail?: string;
 
   // Metadata mới theo UI
   source: 'VS Code' | 'Terminal';
