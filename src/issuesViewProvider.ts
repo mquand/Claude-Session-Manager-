@@ -146,6 +146,12 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         }
         case 'markReviewed': {
           await this.addReviewedId(data.id);
+          await this.refresh();
+          break;
+        }
+        case 'unmarkReviewed': {
+          await this.removeReviewedId(data.id);
+          await this.refresh();
           break;
         }
         case 'openSettings': {
@@ -196,7 +202,6 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           break;
         }
         case 'openSession': {
-          await this.addReviewedId(data.id);
           try {
             await vscode.commands.executeCommand('claude-vscode.primaryEditor.open', data.id);
           } catch {
@@ -397,7 +402,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
   }
 
   private getReviewedIds(): string[] {
-    return this._context?.globalState.get<string[]>('reviewedSessionIds') || [];
+    return this._context?.globalState.get<string[]>('reviewedSessionIds_v2') || [];
   }
 
   private async addReviewedId(id: string) {
@@ -405,8 +410,14 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     const reviewed = this.getReviewedIds();
     if (!reviewed.includes(id)) {
       reviewed.push(id);
-      await this._context.globalState.update('reviewedSessionIds', reviewed);
+      await this._context.globalState.update('reviewedSessionIds_v2', reviewed);
     }
+  }
+
+  private async removeReviewedId(id: string) {
+    if (!id || !this._context) return;
+    const reviewed = this.getReviewedIds().filter(x => x !== id);
+    await this._context.globalState.update('reviewedSessionIds_v2', reviewed);
   }
 
   public async refresh() {
@@ -1039,6 +1050,63 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       color: #c084fc;
     }
 
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.85); }
+    }
+    .pulse-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+      display: inline-block;
+      animation: pulse-dot 1.2s infinite ease-in-out;
+      margin-right: 2px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 1.5px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .badge-need-accept {
+      background: rgba(245, 158, 11, 0.18);
+      color: #d97706;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+    body.vscode-dark .badge-need-accept {
+      color: #fbbf24;
+    }
+    .badge-running {
+      background: rgba(59, 130, 246, 0.18);
+      color: #2563eb;
+      border: 1px solid rgba(59, 130, 246, 0.35);
+    }
+    body.vscode-dark .badge-running {
+      color: #60a5fa;
+    }
+    .badge-need-review {
+      background: rgba(168, 85, 247, 0.18);
+      color: #9333ea;
+      border: 1px solid rgba(168, 85, 247, 0.35);
+    }
+    body.vscode-dark .badge-need-review {
+      color: #c084fc;
+    }
+    .badge-done {
+      background: rgba(16, 185, 129, 0.12);
+      color: #059669;
+      border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+    body.vscode-dark .badge-done {
+      color: #34d399;
+    }
+
     .btn-review {
       background: #7c3aed;
       color: #ffffff;
@@ -1494,6 +1562,14 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       renderSessions();
     }
 
+    function unmarkSessionReviewed(id) {
+      if (!id) return;
+      reviewedIds.delete(id);
+      saveState();
+      vscode.postMessage({ type: 'unmarkReviewed', id });
+      renderSessions();
+    }
+
     function toggleSection(key) {
       sectionState[key] = !sectionState[key];
       saveState();
@@ -1512,12 +1588,25 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           '</div>';
       } else if (s.isNeedReview) {
         actionButtons = '<div class="card-actions">' +
-          '<button class="btn btn-review" data-action="review-open" data-id="' + s.id + '">' + t('btnReview') + '</button>' +
+          '<button class="btn btn-review" data-action="open" data-id="' + s.id + '">' + t('btnReview') + '</button>' +
           '<button class="btn btn-secondary" data-action="mark-reviewed" data-id="' + s.id + '" title="' + t('btnMarkReviewed') + '">' + t('btnMarkReviewed') + '</button>' +
+          '</div>';
+      } else if (s.status === 'done' && currentFilter === 'today') {
+        actionButtons = '<div class="card-actions">' +
+          '<button class="btn btn-secondary" data-action="unmark-reviewed" data-id="' + s.id + '" title="' + (currentLang === 'en' ? 'Mark as Need Review' : 'Đánh dấu cần review lại') + '">' + (currentLang === 'en' ? '👁️ Need review' : '👁️ Review lại') + '</button>' +
           '</div>';
       }
 
-      const reviewBadge = s.isNeedReview ? '<span class="review-badge">' + t('tabReview') + '</span>' : '';
+      let statusBadge = '';
+      if (s.status === 'need_accept') {
+        statusBadge = '<span class="status-badge badge-need-accept">⏳ ' + (currentLang === 'en' ? 'Need Approval' : 'Chờ duyệt') + '</span>';
+      } else if (s.status === 'running') {
+        statusBadge = '<span class="status-badge badge-running"><span class="pulse-dot"></span> ' + (currentLang === 'en' ? 'Running' : 'Đang chạy') + '</span>';
+      } else if (s.isNeedReview) {
+        statusBadge = '<span class="status-badge badge-need-review">👁️ ' + (currentLang === 'en' ? 'Need Review' : 'Cần review') + '</span>';
+      } else if (s.status === 'done') {
+        statusBadge = '<span class="status-badge badge-done">✓ ' + (currentLang === 'en' ? 'Done' : 'Đã xong') + '</span>';
+      }
       
       const branchFooterItem = s.branch ? (
         '<span class="footer-meta-item branch-info" data-action="filter-worktree" data-branch="' + escapeHtml(s.branch) + '" title="' + (currentLang === 'en' ? 'Click to filter worktree: ' : 'Click để lọc theo worktree: ') + escapeHtml(s.branch) + '">' +
@@ -1553,7 +1642,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
             '<div class="meta-row">' +
               '<span class="repo-badge">' + escapeHtml(s.repo) + '</span>' +
               (s.issueId ? '<span class="issue-badge">' + escapeHtml(s.issueId) + '</span>' : '') +
-              reviewBadge +
+              statusBadge +
               '<span class="title-text" title="' + escapeHtml(s.title) + '">' + escapeHtml(s.title) + '</span>' +
               '<button class="card-delete-btn" title="' + t('btnDeleteTitle') + '" data-action="delete" data-id="' + s.id + '" data-title="' + escapeHtml(s.title) + '" data-path="' + encodeURIComponent(s.filePath || '') + '">' +
                 '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
@@ -1902,7 +1991,6 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         if (action === 'diff') {
           e.stopPropagation();
           if (id) {
-            markSessionReviewed(id);
             openSession(id);
           }
           return;
@@ -1914,24 +2002,20 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           return;
         }
 
-        if (action === 'review-open') {
-          e.stopPropagation();
-          if (id) {
-            markSessionReviewed(id);
-            openSession(id);
-          }
-          return;
-        }
-
         if (action === 'mark-reviewed') {
           e.stopPropagation();
           if (id) markSessionReviewed(id);
           return;
         }
 
+        if (action === 'unmark-reviewed') {
+          e.stopPropagation();
+          if (id) unmarkSessionReviewed(id);
+          return;
+        }
+
         if (action === 'open') {
           if (id) {
-            markSessionReviewed(id);
             openSession(id);
           }
           return;
