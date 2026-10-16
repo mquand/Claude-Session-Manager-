@@ -1459,7 +1459,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         btnDiff: "Xem diff",
         btnApprove: "Duyệt & Chạy",
         btnReview: "Xem kết quả",
-        btnMarkReviewed: "✓ Đã xem",
+        btnMarkReviewed: "Đã xem",
         btnDeleteTitle: "Xoá phiên hội thoại",
         noSessionsActive: "Hiện không có task nào đang chạy hoặc cần review.",
         noSessionsToday: "Không có task nào phát sinh trong ngày hôm nay.",
@@ -1482,7 +1482,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         btnDiff: "View Diff",
         btnApprove: "Approve & Run",
         btnReview: "Review Result",
-        btnMarkReviewed: "✓ Reviewed",
+        btnMarkReviewed: "Reviewed",
         btnDeleteTitle: "Delete conversation session",
         noSessionsActive: "No tasks are currently running or waiting for review.",
         noSessionsToday: "No sessions recorded for today.",
@@ -1593,19 +1593,19 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
           '</div>';
       } else if (s.status === 'done' && currentFilter === 'today') {
         actionButtons = '<div class="card-actions">' +
-          '<button class="btn btn-secondary" data-action="unmark-reviewed" data-id="' + s.id + '" title="' + (currentLang === 'en' ? 'Mark as Need Review' : 'Đánh dấu cần review lại') + '">' + (currentLang === 'en' ? '👁️ Need review' : '👁️ Review lại') + '</button>' +
+          '<button class="btn btn-secondary" data-action="unmark-reviewed" data-id="' + s.id + '" title="' + (currentLang === 'en' ? 'Mark as Need Review' : 'Đánh dấu cần review lại') + '">' + (currentLang === 'en' ? 'Need review' : 'Review lại') + '</button>' +
           '</div>';
       }
 
       let statusBadge = '';
       if (s.status === 'need_accept') {
-        statusBadge = '<span class="status-badge badge-need-accept">⏳ ' + (currentLang === 'en' ? 'Need Approval' : 'Chờ duyệt') + '</span>';
+        statusBadge = '<span class="status-badge badge-need-accept">' + (currentLang === 'en' ? 'Need Approval' : 'Chờ duyệt') + '</span>';
       } else if (s.status === 'running') {
         statusBadge = '<span class="status-badge badge-running"><span class="pulse-dot"></span> ' + (currentLang === 'en' ? 'Running' : 'Đang chạy') + '</span>';
       } else if (s.isNeedReview) {
-        statusBadge = '<span class="status-badge badge-need-review">👁️ ' + (currentLang === 'en' ? 'Need Review' : 'Cần review') + '</span>';
+        statusBadge = '<span class="status-badge badge-need-review">' + (currentLang === 'en' ? 'Need Review' : 'Cần review') + '</span>';
       } else if (s.status === 'done') {
-        statusBadge = '<span class="status-badge badge-done">✓ ' + (currentLang === 'en' ? 'Done' : 'Đã xong') + '</span>';
+        statusBadge = '<span class="status-badge badge-done">' + (currentLang === 'en' ? 'Done' : 'Đã xong') + '</span>';
       }
       
       const branchFooterItem = s.branch ? (
@@ -1869,7 +1869,9 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
         if (filtered.length === 0) {
           if (currentWorktree) {
             html = '<div style="text-align: center; color: var(--text-muted); padding: 30px 16px; font-size: 12px; line-height: 1.6;">' +
-              '<div style="font-size: 24px; margin-bottom: 8px;">🌿</div>' +
+              '<div style="margin-bottom: 8px; color: var(--text-muted);">' +
+                '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>' +
+              '</div>' +
               '<div style="font-weight: 600; color: var(--text-main); margin-bottom: 4px;">' + (currentLang === 'en' ? 'Worktree: ' : 'Git Worktree: ') + escapeHtml(currentWorktree) + '</div>' +
               '<div>' + (currentLang === 'en' ? 'No Claude sessions recorded for this worktree yet.' : 'Chưa có phiên làm việc Claude nào trong worktree này.') + '</div>' +
               '<div style="margin-top: 8px; font-size: 11px; opacity: 0.8;">' + (currentLang === 'en' ? 'Run <code>claude</code> in this folder to start a new task.' : 'Mở terminal tại thư mục worktree này và gõ <code>claude</code> để bắt đầu task mới!') + '</div>' +
