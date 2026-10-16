@@ -7,7 +7,7 @@ const os = require("os");
 const readline = require("readline");
 const child_process = require("child_process");
 class SessionScanner {
-    static CACHE_VERSION = 5;
+    static CACHE_VERSION = 6;
     static sessionCache = new Map();
     static deleteSession(sessionId, filePath) {
         try {
@@ -393,25 +393,38 @@ class SessionScanner {
         }
         return results;
     }
-    static detectSessionError(item) {
+    static extractErrorCode(item) {
         if (!item)
             return null;
-        // 1. Explicit error types in JSONL
+        // 1. Direct status/code property in error object
+        const rawCode = item.status || item.statusCode || item.code ||
+            item.error?.status || item.error?.statusCode || item.error?.code ||
+            item.message?.error?.status || item.message?.error?.statusCode || item.message?.error?.code;
+        if (typeof rawCode === 'number' && rawCode >= 400 && rawCode <= 599) {
+            return `Lỗi ${rawCode}`;
+        }
+        if (typeof rawCode === 'string') {
+            const match = rawCode.match(/\b(4\d{2}|5\d{2})\b/);
+            if (match) {
+                return `Lỗi ${match[1]}`;
+            }
+        }
+        // 2. Stop reason code (ví dụ khi bị chạm ngưỡng max output tokens)
+        if (item.message?.stop_reason === 'max_tokens') {
+            return 'Hết token';
+        }
+        // 3. Chuỗi text trong item.error hoặc assistant - CHỈ bắt theo mã code, KHÔNG bắt nội dung câu chữ
+        let text = '';
         if (item.type === 'error' || item.isError) {
-            const msg = typeof item.error === 'string'
+            text = typeof item.error === 'string'
                 ? item.error
-                : (item.error?.message || item.message || (item.error ? JSON.stringify(item.error) : ''));
-            return SessionScanner.categorizeErrorMessage(msg);
+                : (item.error?.message || item.message || '');
         }
-        // 2. Anthropic API error object inside message
-        if (item.message?.error) {
+        else if (item.message?.error) {
             const errObj = item.message.error;
-            const msg = typeof errObj === 'string' ? errObj : (errObj.message || errObj.type || JSON.stringify(errObj));
-            return SessionScanner.categorizeErrorMessage(msg);
+            text = typeof errObj === 'string' ? errObj : (errObj.message || '');
         }
-        // 3. Assistant text containing API / Gateway errors
-        if (item.type === 'assistant') {
-            let text = '';
+        else if (item.type === 'assistant') {
             const content = item.message?.content;
             if (Array.isArray(content)) {
                 for (const part of content) {
@@ -423,72 +436,18 @@ class SessionScanner {
             else if (typeof content === 'string') {
                 text = content;
             }
-            if (text) {
-                const trimmed = text.trim();
-                // Specific user proxy error
-                if (trimmed.includes('gãy hết tay rồi') || trimmed.includes('chạm cỏ thôi')) {
-                    return 'Lỗi 503';
-                }
-                // Pattern: "• API Error: 503", "API Error: 429", etc.
-                const apiErrorMatch = trimmed.match(/(?:•\s*)?API Error:\s*(\d+)/i);
-                if (apiErrorMatch) {
-                    const code = apiErrorMatch[1];
-                    if (code === '429')
-                        return 'Bị limit';
-                    if (code === '503')
-                        return 'Lỗi 503';
-                    if (code === '500')
-                        return 'Lỗi 500';
-                    if (code === '502' || code === '504')
-                        return `Lỗi ${code}`;
-                    if (code === '401' || code === '403')
-                        return 'Lỗi Auth';
-                    return `Lỗi ${code}`;
-                }
-                // Rate limit patterns
-                if (/rate[_\s-]?limit/i.test(trimmed) &&
-                    (trimmed.startsWith('•') || trimmed.includes('exceeded') || trimmed.includes('reached') || trimmed.includes('too many requests'))) {
-                    return 'Bị limit';
-                }
-                // Overloaded patterns
-                if (trimmed.includes('overloaded_error') ||
-                    /(?:•\s*)?(?:server|claude) is (?:currently )?overloaded/i.test(trimmed)) {
-                    return 'Lỗi 503';
-                }
-                // Token limit / context patterns
-                if (item.message?.stop_reason === 'max_tokens' ||
-                    /context[_\s-]?length[_\s-]?exceeded/i.test(trimmed) ||
-                    /prompt is too long/i.test(trimmed) ||
-                    /maximum context length/i.test(trimmed)) {
-                    return 'Hết token';
-                }
-                if (trimmed.startsWith('• API Error:') || trimmed.startsWith('API Error:')) {
-                    return 'Lỗi API';
-                }
+        }
+        if (text) {
+            const trimmed = text.trim();
+            // CHỈ BẮT CODE: "• API Error: 503", "API Error: 429", "HTTP 500", "status: 502", etc.
+            const codeMatch = trimmed.match(/(?:•\s*)?API Error:\s*(\d{3})/i) ||
+                trimmed.match(/\bHTTP(?:\s*status)?[:\s]+(\d{3})\b/i) ||
+                trimmed.match(/\bstatus(?:\s*code)?[:=]\s*(\d{3})\b/i);
+            if (codeMatch) {
+                return `Lỗi ${codeMatch[1]}`;
             }
         }
         return null;
-    }
-    static categorizeErrorMessage(msg) {
-        if (!msg)
-            return 'Lỗi API';
-        if (msg.includes('gãy hết tay rồi') || msg.includes('chạm cỏ thôi'))
-            return 'Lỗi 503';
-        if (msg.includes('503') || /overloaded/i.test(msg))
-            return 'Lỗi 503';
-        if (msg.includes('429') || /rate[_\s-]?limit/i.test(msg) || /too many requests/i.test(msg))
-            return 'Bị limit';
-        if (msg.includes('500'))
-            return 'Lỗi 500';
-        if (msg.includes('502'))
-            return 'Lỗi 502';
-        if (msg.includes('504'))
-            return 'Lỗi 504';
-        if (msg.includes('401') || msg.includes('403'))
-            return 'Lỗi Auth';
-        if (/context[_\s-]?length/i.test(msg) || /max_tokens/i.test(msg) || /token[_\s-]?limit/i.test(msg))
-            return 'Hết token';
-        return 'Lỗi API';
     }
     static async fastParseSession(filePath, sessionId, mtimeMs, projectDir, activeInfo, options) {
         try {
@@ -669,7 +628,7 @@ class SessionScanner {
                             lastTurnHadToolUse = false;
                         }
                     }
-                    const detectedErr = SessionScanner.detectSessionError(item);
+                    const detectedErr = SessionScanner.extractErrorCode(item);
                     if (detectedErr) {
                         lastErrorDetail = detectedErr;
                         lastTurnHadToolUse = false;
