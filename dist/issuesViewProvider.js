@@ -17,6 +17,7 @@ class IssuesViewProvider {
     _debounceTimer;
     _statusBarItem;
     _lastSessions = [];
+    _lastGroupedSessions = [];
     _currentWorktreeFilter = '';
     constructor(_extensionUri, _context) {
         this._extensionUri = _extensionUri;
@@ -72,28 +73,20 @@ class IssuesViewProvider {
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
         webviewView.onDidChangeVisibility(() => {
             if (webviewView.visible) {
-                if (this._lastSessions.length > 0) {
-                    webviewView.webview.postMessage({
-                        type: 'updateSessions',
-                        sessions: this._lastSessions,
-                        reviewedIds: this.getReviewedIds(),
-                        currentWorkspace: this.getCurrentWorkspace(),
-                        lang: this.getLanguage(),
-                        worktreeFilter: this._currentWorktreeFilter,
-                        hasWorktrees: this.checkHasWorktrees()
-                    });
-                }
                 this.refresh();
             }
         });
         webviewView.webview.onDidReceiveMessage(async (data) => {
             switch (data.type) {
                 case 'ready': {
-                    if (this._lastSessions.length > 0) {
-                        const groupedSessions = IssuesViewProvider.groupSessionsByTaskStream(this._lastSessions);
+                    const sessionsToSend = this._lastGroupedSessions.length > 0
+                        ? this._lastGroupedSessions
+                        : (this._lastSessions.length > 0 ? IssuesViewProvider.groupSessionsByTaskStream(this._lastSessions) : []);
+                    if (sessionsToSend.length > 0) {
+                        this._lastGroupedSessions = sessionsToSend;
                         webviewView.webview.postMessage({
                             type: 'updateSessions',
-                            sessions: groupedSessions,
+                            sessions: sessionsToSend,
                             reviewedIds: this.getReviewedIds(),
                             currentWorkspace: this.getCurrentWorkspace(),
                             lang: this.getLanguage(),
@@ -400,8 +393,11 @@ class IssuesViewProvider {
             return sessions ? [...sessions] : [];
         }
         const defaultBranches = new Set(['main', 'master', 'head', 'dev', 'develop']);
+        // Sắp xếp giảm dần theo thời gian cập nhật để phiên mới nhất luôn đứng trước
+        const sorted = [...sessions].sort((a, b) => b.updatedAt - a.updatedAt);
+        const MAX_CONTINUATION_GAP = 12 * 60 * 60 * 1000; // Tối đa 12 tiếng giữa 2 phiên liên tiếp của cùng một chuỗi task
         // Build tags for each session: issue:<repo>:<normIssue> or branch:<repo>:<branch>
-        const sessionTags = sessions.map(s => {
+        const sessionTags = sorted.map(s => {
             const tags = [];
             const repo = (s.repo || '').toLowerCase();
             if (s.issueId) {
@@ -417,7 +413,7 @@ class IssuesViewProvider {
             return tags;
         });
         // Disjoint Set Union (DSU) by session index
-        const parent = sessions.map((_, i) => i);
+        const parent = sorted.map((_, i) => i);
         function find(i) {
             if (parent[i] === i)
                 return i;
@@ -431,31 +427,33 @@ class IssuesViewProvider {
                 parent[rootI] = rootJ;
             }
         }
-        // Map tag -> first session index that had this tag
-        const tagToFirstIndex = new Map();
-        for (let i = 0; i < sessions.length; i++) {
+        // Map tag -> index của phiên trước đó gần nhất theo thứ tự thời gian
+        const tagToLastIndex = new Map();
+        for (let i = 0; i < sorted.length; i++) {
             for (const tag of sessionTags[i]) {
-                if (tagToFirstIndex.has(tag)) {
-                    union(i, tagToFirstIndex.get(tag));
+                if (tagToLastIndex.has(tag)) {
+                    const prevIdx = tagToLastIndex.get(tag);
+                    // Chỉ gom nhóm phiên nối tiếp nếu khoảng cách thời gian <= 12 tiếng
+                    if (sorted[prevIdx].updatedAt - sorted[i].updatedAt <= MAX_CONTINUATION_GAP) {
+                        union(i, prevIdx);
+                    }
                 }
-                else {
-                    tagToFirstIndex.set(tag, i);
-                }
+                tagToLastIndex.set(tag, i);
             }
         }
         // Group sessions by their root
         const rootGroups = new Map();
-        for (let i = 0; i < sessions.length; i++) {
+        for (let i = 0; i < sorted.length; i++) {
             if (sessionTags[i].length === 0) {
                 // Unidentified session: keep independent
-                rootGroups.set(-1 - i, [sessions[i]]);
+                rootGroups.set(-1 - i, [sorted[i]]);
             }
             else {
                 const root = find(i);
                 if (!rootGroups.has(root)) {
                     rootGroups.set(root, []);
                 }
-                rootGroups.get(root).push(sessions[i]);
+                rootGroups.get(root).push(sorted[i]);
             }
         }
         const result = [];
@@ -498,6 +496,7 @@ class IssuesViewProvider {
         });
         this._lastSessions = sessions;
         const groupedSessions = IssuesViewProvider.groupSessionsByTaskStream(sessions);
+        this._lastGroupedSessions = groupedSessions;
         if (this._currentWorktreeFilter) {
             const hasBranchInSessions = sessions.some(s => s.branch === this._currentWorktreeFilter && (!s.cwd || fs.existsSync(s.cwd)));
             const discovered = scanner_1.SessionScanner.discoverWorkspaceWorktrees(wsFolders);
@@ -665,7 +664,7 @@ class IssuesViewProvider {
       --need-accept: #f59e0b;
       --done: #10b981;
       --running: #3b82f6;
-      --need-review: #a855f7;
+      --need-review: var(--done);
       --failed: #ef4444;
     }
 
@@ -705,7 +704,7 @@ class IssuesViewProvider {
       --need-accept: #d97706;
       --done: #059669;
       --running: #2563eb;
-      --need-review: #9333ea;
+      --need-review: var(--done);
       --failed: #dc2626;
     }
 
@@ -1115,24 +1114,6 @@ class IssuesViewProvider {
       background-color: var(--failed);
     }
 
-    .review-badge {
-      background: rgba(168, 85, 247, 0.18);
-      color: #9333ea;
-      border: 1px solid rgba(168, 85, 247, 0.35);
-      padding: 1px 6px;
-      border-radius: 4px;
-      font-size: 10px;
-      font-weight: 600;
-      margin-left: 6px;
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-    }
-
-    body.vscode-dark .review-badge {
-      color: #c084fc;
-    }
-
     @keyframes pulse-dot {
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.35; transform: scale(0.85); }
@@ -1174,12 +1155,12 @@ class IssuesViewProvider {
       color: #60a5fa;
     }
     .badge-need-review {
-      background: rgba(168, 85, 247, 0.18);
-      color: #9333ea;
-      border: 1px solid rgba(168, 85, 247, 0.35);
+      background: rgba(148, 163, 184, 0.12);
+      color: var(--text-muted);
+      border: 1px solid rgba(148, 163, 184, 0.25);
     }
     body.vscode-dark .badge-need-review {
-      color: #c084fc;
+      color: var(--text-muted);
     }
     .badge-done {
       background: rgba(16, 185, 129, 0.12);
@@ -1196,20 +1177,6 @@ class IssuesViewProvider {
     }
     body.vscode-dark .badge-failed {
       color: #f87171;
-    }
-
-    .btn-review {
-      background: #7c3aed;
-      color: #ffffff;
-      border: none;
-      border-radius: 3px;
-      padding: 3px 8px;
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .btn-review:hover {
-      background: #6d28d9;
     }
     .btn-failed {
       background: #dc2626;
@@ -1396,27 +1363,29 @@ class IssuesViewProvider {
       color: #1d4ed8;
     }
 
-    .card-action-btn.btn-review {
-      background: rgba(168, 85, 247, 0.15);
-      border-color: rgba(168, 85, 247, 0.35);
-      color: #c084fc;
+    .card-action-btn.btn-review,
+    .card-action-btn.btn-review-again {
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      color: var(--text-main);
     }
 
-    .card-action-btn.btn-review:hover {
-      background: rgba(168, 85, 247, 0.25);
-      border-color: rgba(168, 85, 247, 0.5);
+    .card-action-btn.btn-review:hover,
+    .card-action-btn.btn-review:active,
+    .card-action-btn.btn-review-again:hover,
+    .card-action-btn.btn-review-again:active {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: rgba(59, 130, 246, 0.35);
+      color: #60a5fa;
     }
 
-    .card-action-btn.btn-review-again:hover {
-      background: rgba(168, 85, 247, 0.12);
-      border-color: rgba(168, 85, 247, 0.4);
-      color: #c084fc;
-    }
-
-    body.vscode-light .card-action-btn.btn-review-again:hover {
-      background: #faf5ff;
-      border-color: #d8b4fe;
-      color: #7e22ce;
+    body.vscode-light .card-action-btn.btn-review:hover,
+    body.vscode-light .card-action-btn.btn-review:active,
+    body.vscode-light .card-action-btn.btn-review-again:hover,
+    body.vscode-light .card-action-btn.btn-review-again:active {
+      background: #eff6ff;
+      border-color: #93c5fd;
+      color: #2563eb;
     }
 
     .card-action-btn.btn-approve {
