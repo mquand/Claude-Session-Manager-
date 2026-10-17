@@ -703,7 +703,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       --need-accept: #f59e0b;
       --done: #10b981;
       --running: #3b82f6;
-      --need-review: var(--done);
+      --need-review: #a855f7;
       --failed: #ef4444;
     }
 
@@ -743,7 +743,7 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       --need-accept: #d97706;
       --done: #059669;
       --running: #2563eb;
-      --need-review: var(--done);
+      --need-review: #9333ea;
       --failed: #dc2626;
     }
 
@@ -1194,12 +1194,12 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
       color: #60a5fa;
     }
     .badge-need-review {
-      background: rgba(148, 163, 184, 0.12);
-      color: var(--text-muted);
-      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: rgba(168, 85, 247, 0.18);
+      color: #9333ea;
+      border: 1px solid rgba(168, 85, 247, 0.35);
     }
     body.vscode-dark .badge-need-review {
-      color: var(--text-muted);
+      color: #c084fc;
     }
     .badge-done {
       background: rgba(16, 185, 129, 0.12);
