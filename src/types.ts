@@ -34,4 +34,6 @@ export interface ClaudeSession {
 export interface ScanOptions {
   workspaceFolders?: string[];
   defaultRepo?: string;
+  hiddenSessionIds?: Set<string>;
+  dbPathHint?: string;
 }

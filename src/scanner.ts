@@ -97,12 +97,94 @@ export class SessionScanner {
     return activeMap;
   }
 
+  public static getHiddenSessionIds(dbPathHint?: string): Set<string> {
+    const hiddenSet = new Set<string>();
+    const candidates: string[] = [];
+
+    if (dbPathHint && fs.existsSync(dbPathHint)) {
+      candidates.push(dbPathHint);
+    }
+
+    const home = os.homedir();
+    if (process.platform === 'darwin') {
+      candidates.push(
+        path.join(home, 'Library/Application Support/Code/User/globalStorage/state.vscdb'),
+        path.join(home, 'Library/Application Support/Code - Insiders/User/globalStorage/state.vscdb'),
+        path.join(home, 'Library/Application Support/Cursor/User/globalStorage/state.vscdb'),
+        path.join(home, 'Library/Application Support/VSCodium/User/globalStorage/state.vscdb')
+      );
+    } else if (process.platform === 'win32') {
+      const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+      candidates.push(
+        path.join(appData, 'Code/User/globalStorage/state.vscdb'),
+        path.join(appData, 'Code - Insiders/User/globalStorage/state.vscdb'),
+        path.join(appData, 'Cursor/User/globalStorage/state.vscdb'),
+        path.join(appData, 'VSCodium/User/globalStorage/state.vscdb')
+      );
+    } else {
+      candidates.push(
+        path.join(home, '.config/Code/User/globalStorage/state.vscdb'),
+        path.join(home, '.config/Code - Insiders/User/globalStorage/state.vscdb'),
+        path.join(home, '.config/Cursor/User/globalStorage/state.vscdb'),
+        path.join(home, '.config/VSCodium/User/globalStorage/state.vscdb')
+      );
+    }
+
+    for (const dbPath of candidates) {
+      if (!fs.existsSync(dbPath)) continue;
+
+      // 1. Thử dùng sqlite3 CLI (nhanh và chính xác 100%, có sẵn trên macOS và hầu hết Linux)
+      try {
+        const stdout = child_process.execSync(
+          `sqlite3 "${dbPath}" "SELECT value FROM ItemTable WHERE key = 'Anthropic.claude-code';"`
+        , { timeout: 2000, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+        if (stdout && stdout.trim()) {
+          const parsed = JSON.parse(stdout.trim());
+          if (Array.isArray(parsed.hiddenSessionIds)) {
+            for (const id of parsed.hiddenSessionIds) {
+              if (typeof id === 'string') hiddenSet.add(id);
+            }
+            if (hiddenSet.size > 0) return hiddenSet;
+          }
+        }
+      } catch {}
+
+      // 2. Dự phòng: Đọc trực tiếp file sqlite nếu không có công cụ sqlite3 CLI
+      try {
+        const buf = fs.readFileSync(dbPath);
+        const marker = Buffer.from('hiddenSessionIds');
+        let searchStart = 0;
+        while (searchStart < buf.length) {
+          const idx = buf.indexOf(marker, searchStart);
+          if (idx === -1) break;
+          // Quét khối dữ liệu xung quanh marker để tìm danh sách UUIDs
+          const chunk = buf.subarray(idx, Math.min(idx + 131072, buf.length)).toString('utf8');
+          const uuidRegex = /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi;
+          let m: RegExpExecArray | null;
+          let foundCount = 0;
+          while ((m = uuidRegex.exec(chunk)) !== null) {
+            hiddenSet.add(m[0]);
+            foundCount++;
+          }
+          if (foundCount > 0) {
+            break;
+          }
+          searchStart = idx + marker.length;
+        }
+        if (hiddenSet.size > 0) return hiddenSet;
+      } catch {}
+    }
+
+    return hiddenSet;
+  }
+
   public static async scanSessions(customPath?: string, options?: ScanOptions): Promise<ClaudeSession[]> {
     const defaultClaudeProjects = customPath ? this.resolveHomePath(customPath) : path.join(os.homedir(), '.claude', 'projects');
     if (!fs.existsSync(defaultClaudeProjects)) {
       return [];
     }
 
+    const hiddenSessionIds = options?.hiddenSessionIds ?? this.getHiddenSessionIds(options?.dbPathHint);
     const activeMap = this.getActiveSessionsMap();
     const currentFiles = new Map<string, { filePath: string; sessionId: string; mtimeMs: number; dirPath: string }>();
 
@@ -118,6 +200,9 @@ export class SessionScanner {
             if (file.isFile() && file.name.endsWith('.jsonl') && !file.name.toLowerCase().includes('observer')) {
               const fullPath = path.join(projectPath, file.name);
               const sessionId = file.name.replace('.jsonl', '');
+              if (hiddenSessionIds.has(sessionId)) {
+                continue;
+              }
               const stat = fs.statSync(fullPath);
               currentFiles.set(sessionId, {
                 filePath: fullPath,
@@ -133,10 +218,11 @@ export class SessionScanner {
       console.error('Lỗi duyệt projects:', err);
     }
 
-    // Xoá session đã bị xoá hoặc là observer session rác
+    // Xoá session đã bị xoá, đã bị archive trên giao diện hoặc là observer session rác
     for (const [cachedId, cachedItem] of this.sessionCache) {
       if (
         !currentFiles.has(cachedId) ||
+        hiddenSessionIds.has(cachedId) ||
         (cachedItem.session.repo && cachedItem.session.repo.toLowerCase().includes('observer')) ||
         (cachedItem.session.modelName && cachedItem.session.modelName.toLowerCase().includes('synthetic'))
       ) {
@@ -697,16 +783,24 @@ export class SessionScanner {
         title = meaningfulFirstPrompt ? meaningfulFirstPrompt.split('\n')[0] : `Session ${sessionId.slice(0, 8)}`;
       }
 
-      // Tách Issue ID (#xxxx)
-      const issueMatch = title.match(/#(\d+)/) || (meaningfulFirstPrompt && meaningfulFirstPrompt.match(/#(\d+)/));
+      // Tách Issue ID (#xxxx, [xxxx], Issue xxxx, POS-xxxx)
+      const issueRegex = /#(\d+)|\[(\d{3,6})\]|\b(?:issue|ticket|task|pr|pos|bug)[\s\-_:]*#?(\d{3,6})\b/i;
+      const issueMatch = title.match(issueRegex) || (meaningfulFirstPrompt && meaningfulFirstPrompt.match(issueRegex));
       let issueId: string | undefined = undefined;
 
       if (issueMatch) {
-        issueId = issueMatch[0];
-        // Làm sạch title: Nếu trong title bị dính lặp lại "#5433" hoặc "[#5433]" thì bỏ đi cho gọn
-        title = title.replace(/[\[\(]?#\d+[\]\)]?\s*[:\-]?\s*/g, '').replace(/^[\[\(]\s*[\]\)]\s*/, '').trim();
-        if (!title) {
-          title = meaningfulFirstPrompt ? meaningfulFirstPrompt.split('\n')[0] : `Session ${sessionId.slice(0, 8)}`;
+        const issueNum = issueMatch[1] || issueMatch[2] || issueMatch[3];
+        if (issueNum) {
+          issueId = `#${issueNum}`;
+          // Lam sach title: Loai bo cac tien to issue trung lap trong tieu de
+          title = title
+            .replace(/[\[\(]?#?\d+[\]\)]?\s*[:\-]?\s*/g, '')
+            .replace(/\b(?:issue|ticket|task|pr|pos|bug)[\s\-_:]*#?\d+\s*[:\-]?\s*/gi, '')
+            .replace(/^[\[\(]\s*[\]\)]\s*/, '')
+            .trim();
+          if (!title) {
+            title = meaningfulFirstPrompt ? meaningfulFirstPrompt.split('\n')[0] : `Session ${sessionId.slice(0, 8)}`;
+          }
         }
       }
 

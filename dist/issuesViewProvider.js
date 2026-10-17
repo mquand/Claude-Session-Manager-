@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.IssuesViewProvider = void 0;
 const vscode = require("vscode");
 const fs = require("fs");
+const path = require("path");
 const scanner_1 = require("./scanner");
 const updater_1 = require("./updater");
 class IssuesViewProvider {
@@ -362,6 +363,28 @@ class IssuesViewProvider {
             watcher.onDidDelete(triggerDebouncedRefresh);
             this._watchers.push(watcher);
         }
+        if (this._context?.globalStorageUri) {
+            try {
+                const globalStorageDir = path.dirname(this._context.globalStorageUri.fsPath);
+                if (fs.existsSync(globalStorageDir)) {
+                    const pattern = new vscode.RelativePattern(globalStorageDir, 'state.vscdb*');
+                    const dbWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+                    const triggerDebouncedRefresh = () => {
+                        if (this._debounceTimer) {
+                            clearTimeout(this._debounceTimer);
+                        }
+                        this._debounceTimer = setTimeout(() => {
+                            this.refresh();
+                        }, 300);
+                    };
+                    dbWatcher.onDidChange(triggerDebouncedRefresh);
+                    dbWatcher.onDidCreate(triggerDebouncedRefresh);
+                    dbWatcher.onDidDelete(triggerDebouncedRefresh);
+                    this._watchers.push(dbWatcher);
+                }
+            }
+            catch { }
+        }
         if (this._refreshTimer) {
             clearInterval(this._refreshTimer);
         }
@@ -396,49 +419,112 @@ class IssuesViewProvider {
         // Sắp xếp giảm dần theo thời gian cập nhật để phiên mới nhất luôn đứng trước
         const sorted = [...sessions].sort((a, b) => b.updatedAt - a.updatedAt);
         const MAX_CONTINUATION_GAP = 12 * 60 * 60 * 1000; // Tối đa 12 tiếng giữa 2 phiên liên tiếp của cùng một chuỗi task
-        // Build tags for each session: issue:<repo>:<normIssue> or branch:<repo>:<branch>
+        // Helper chuẩn hoá issueId
+        const getNormIssue = (s) => {
+            if (!s.issueId)
+                return undefined;
+            const clean = s.issueId.trim().toLowerCase();
+            return clean.startsWith('#') ? clean : `#${clean}`;
+        };
+        // Helper chuẩn hoá tên conversation để so sánh gom nhóm theo tiêu đề
+        const getNormTitle = (s) => {
+            if (!s.title)
+                return undefined;
+            if (s.title.toLowerCase().startsWith('session ') && s.title.length <= 18)
+                return undefined;
+            const clean = s.title.toLowerCase().replace(/[^a-z0-9\u00C0-\u024F\u1EA0-\u1EF9]/gi, ' ').replace(/\s+/g, ' ').trim();
+            return clean.length >= 4 ? clean : undefined;
+        };
+        // Build tags for each session: issue:<repo>:<normIssue>, title:<repo>:<normTitle>, or branch:<repo>:<branch>
         const sessionTags = sorted.map(s => {
             const tags = [];
             const repo = (s.repo || '').toLowerCase();
-            if (s.issueId) {
-                const normIssue = s.issueId.startsWith('#') ? s.issueId.toLowerCase() : `#${s.issueId.toLowerCase()}`;
+            const normIssue = getNormIssue(s);
+            if (normIssue) {
                 tags.push(`issue:${repo}:${normIssue}`);
+            }
+            const normTitle = getNormTitle(s);
+            if (normTitle) {
+                tags.push(`title:${repo}:${normTitle}`);
             }
             if (s.branch) {
                 const b = s.branch.toLowerCase();
                 if (!defaultBranches.has(b)) {
-                    tags.push(`branch:${repo}:${b}`);
+                    // Neu session da co issueId cu the, va branch lai chua ma so issue khac
+                    // thi khong gan tag branch do cho session nay de tranh nham lan cheo branch.
+                    const branchIssueMatch = b.match(/(?:^|[^\d])(\d{3,6})(?:[^\d]|$)/);
+                    const currentNormIssueNum = normIssue ? normIssue.replace(/\D/g, '') : null;
+                    if (currentNormIssueNum && branchIssueMatch && branchIssueMatch[1] !== currentNormIssueNum) {
+                        // Bo qua tag branch nay vi branch thuoc issue khac
+                    }
+                    else {
+                        tags.push(`branch:${repo}:${b}`);
+                    }
                 }
             }
             return tags;
         });
         // Disjoint Set Union (DSU) by session index
         const parent = sorted.map((_, i) => i);
+        // Lưu tập hợp các issueId thuộc mỗi nhóm (để ngăn chặn việc gộp nhầm 2 issue khác nhau)
+        const groupIssues = sorted.map(s => {
+            const set = new Set();
+            const norm = getNormIssue(s);
+            if (norm)
+                set.add(norm);
+            return set;
+        });
         function find(i) {
             if (parent[i] === i)
                 return i;
             parent[i] = find(parent[i]);
             return parent[i];
         }
+        function canUnion(rootI, rootJ) {
+            const issuesI = groupIssues[rootI];
+            const issuesJ = groupIssues[rootJ];
+            // Nếu CẢ HAI nhóm đều có issueId và khác nhau -> TUYỆT ĐỐI KHÔNG GỘP
+            if (issuesI.size > 0 && issuesJ.size > 0) {
+                for (const id of issuesI) {
+                    if (!issuesJ.has(id))
+                        return false;
+                }
+                for (const id of issuesJ) {
+                    if (!issuesI.has(id))
+                        return false;
+                }
+            }
+            return true;
+        }
         function union(i, j) {
             const rootI = find(i);
             const rootJ = find(j);
             if (rootI !== rootJ) {
+                if (!canUnion(rootI, rootJ)) {
+                    return;
+                }
                 parent[rootI] = rootJ;
+                for (const id of groupIssues[rootI]) {
+                    groupIssues[rootJ].add(id);
+                }
             }
         }
-        // Map tag -> index của phiên trước đó gần nhất theo thứ tự thời gian
-        const tagToLastIndex = new Map();
+        // Map tag -> danh sách index của các phiên trước đó
+        const tagToIndices = new Map();
         for (let i = 0; i < sorted.length; i++) {
             for (const tag of sessionTags[i]) {
-                if (tagToLastIndex.has(tag)) {
-                    const prevIdx = tagToLastIndex.get(tag);
-                    // Chỉ gom nhóm phiên nối tiếp nếu khoảng cách thời gian <= 12 tiếng
-                    if (sorted[prevIdx].updatedAt - sorted[i].updatedAt <= MAX_CONTINUATION_GAP) {
-                        union(i, prevIdx);
+                if (tagToIndices.has(tag)) {
+                    for (const prevIdx of tagToIndices.get(tag)) {
+                        // Chỉ gom nhóm phiên nối tiếp nếu khoảng cách thời gian <= 12 tiếng
+                        if (sorted[prevIdx].updatedAt - sorted[i].updatedAt <= MAX_CONTINUATION_GAP) {
+                            union(i, prevIdx);
+                        }
                     }
                 }
-                tagToLastIndex.set(tag, i);
+                if (!tagToIndices.has(tag)) {
+                    tagToIndices.set(tag, []);
+                }
+                tagToIndices.get(tag).push(i);
             }
         }
         // Group sessions by their root
@@ -490,9 +576,14 @@ class IssuesViewProvider {
                 wsFolders.push(resolved);
             }
         }
+        let dbPathHint = undefined;
+        if (this._context?.globalStorageUri) {
+            dbPathHint = path.join(path.dirname(this._context.globalStorageUri.fsPath), 'state.vscdb');
+        }
         const sessions = await scanner_1.SessionScanner.scanSessions(customPath, {
             workspaceFolders: wsFolders,
-            defaultRepo: defaultRepo || undefined
+            defaultRepo: defaultRepo || undefined,
+            dbPathHint
         });
         this._lastSessions = sessions;
         const groupedSessions = IssuesViewProvider.groupSessionsByTaskStream(sessions);
