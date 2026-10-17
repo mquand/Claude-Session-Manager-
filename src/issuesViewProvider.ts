@@ -1679,16 +1679,15 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
     .sub-session-item {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 6px;
-      padding: 4px 8px;
+      flex-direction: column;
+      gap: 3px;
+      padding: 6px 8px;
       border-radius: 4px;
       background: rgba(0, 0, 0, 0.14);
       font-size: 11px;
       color: var(--text-muted);
       border: 1px solid rgba(255, 255, 255, 0.04);
-      transition: background 0.15s ease;
+      transition: background 0.15s ease, border-color 0.15s ease;
       cursor: pointer;
     }
     body.vscode-light .sub-session-item {
@@ -1697,14 +1696,53 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
     }
     .sub-session-item:hover {
       background: rgba(148, 163, 184, 0.14);
+      border-color: rgba(148, 163, 184, 0.25);
     }
-    .sub-session-left {
+    body.vscode-light .sub-session-item:hover {
+      background: rgba(0, 0, 0, 0.06);
+    }
+    .sub-session-top-row {
       display: flex;
       align-items: center;
-      gap: 5px;
+      justify-content: space-between;
+      gap: 6px;
+      width: 100%;
+    }
+    .sub-session-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       min-width: 0;
       flex: 1;
       overflow: hidden;
+    }
+    .sub-session-title {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sub-session-prompt {
+      font-size: 10.5px;
+      color: var(--text-muted);
+      opacity: 0.8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-style: italic;
+      padding-left: 2px;
+      line-height: 1.3;
+    }
+    .sub-session-bottom-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      color: var(--text-muted);
+      opacity: 0.85;
+      padding-left: 2px;
     }
     .sub-session-right {
       display: flex;
@@ -2179,8 +2217,14 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
               subBadge = '<span class="sub-session-badge need_accept">' + (currentLang === 'en' ? 'Wait' : 'Chờ') + '</span>';
             }
 
-            const promptSnippet = sub.lastUserPrompt ? escapeHtml(sub.lastUserPrompt.replace(/^>\s*/, '').slice(0, 80)) : '';
-            const subTitleTooltip = promptSnippet ? ('&gt; ' + promptSnippet) : (sub.title || sub.id);
+            const promptSnippet = sub.lastUserPrompt ? escapeHtml(sub.lastUserPrompt.replace(/^>\s*/, '').trim().slice(0, 90)) : '';
+            const displayTitle = (sub.title && !sub.title.toLowerCase().startsWith('session '))
+              ? sub.title
+              : (promptSnippet ? promptSnippet.slice(0, 50) : ('Session ' + (sub.shortId || sub.id.slice(0, 8))));
+
+            const promptPreviewHtml = (promptSnippet && promptSnippet !== displayTitle)
+              ? ('<div class="sub-session-prompt">&gt; ' + promptSnippet + (sub.lastUserPrompt && sub.lastUserPrompt.length > 90 ? '...' : '') + '</div>')
+              : '';
 
             const tokenStr = (sub.totalTokens && sub.totalTokens > 0)
               ? ('<span style="opacity: 0.35;">•</span><span class="sub-session-token">' + formatTokensSimple(sub.totalTokens) + ' tok</span>')
@@ -2189,24 +2233,30 @@ export class IssuesViewProvider implements vscode.WebviewViewProvider {
               ? ('<span style="opacity: 0.35;">•</span><span style="color: #10b981; font-weight: 600;">' + escapeHtml(sub.costUSD) + '</span>')
               : '';
 
-            itemsHtml += '<div class="sub-session-item" data-action="open" data-id="' + sub.id + '" title="' + subTitleTooltip + '">' +
-              '<div class="sub-session-left">' +
-                subBadge +
+            itemsHtml += '<div class="sub-session-item" data-action="open" data-id="' + sub.id + '" title="' + (promptSnippet ? ('&gt; ' + promptSnippet) : escapeHtml(displayTitle)) + '">' +
+              '<div class="sub-session-top-row">' +
+                '<div class="sub-session-title-wrap">' +
+                  subBadge +
+                  '<span class="sub-session-title" title="' + escapeHtml(displayTitle) + '">' + escapeHtml(displayTitle) + '</span>' +
+                '</div>' +
+                '<div class="sub-session-right">' +
+                  '<button class="sub-session-btn" data-action="open" data-id="' + sub.id + '" title="' + (currentLang === 'en' ? 'Open earlier session' : 'Mở phiên trước này') + '">' +
+                    (t('btnOpen') || (currentLang === 'en' ? 'Open' : 'Mở')) +
+                  '</button>' +
+                  '<button class="sub-session-btn delete" data-action="delete" data-id="' + sub.id + '" data-title="' + escapeHtml(displayTitle) + '" data-path="' + encodeURIComponent(sub.filePath || '') + '" title="' + t('btnDelete') + '">' +
+                    '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                      '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
+                    '</svg>' +
+                  '</button>' +
+                '</div>' +
+              '</div>' +
+              promptPreviewHtml +
+              '<div class="sub-session-bottom-row">' +
                 '<span class="sub-session-time">' + escapeHtml(sub.statusMessage) + '</span>' +
                 '<span style="opacity: 0.35;">•</span>' +
                 '<span class="sub-session-meta">' + escapeHtml(sub.modelName || 'Claude') + '</span>' +
                 tokenStr +
                 costStr +
-              '</div>' +
-              '<div class="sub-session-right">' +
-                '<button class="sub-session-btn" data-action="open" data-id="' + sub.id + '" title="' + (currentLang === 'en' ? 'Open earlier session' : 'Mở phiên trước này') + '">' +
-                  (t('btnOpen') || (currentLang === 'en' ? 'Open' : 'Mở')) +
-                '</button>' +
-                '<button class="sub-session-btn delete" data-action="delete" data-id="' + sub.id + '" data-title="' + escapeHtml(sub.title || sub.id) + '" data-path="' + encodeURIComponent(sub.filePath || '') + '" title="' + t('btnDelete') + '">' +
-                  '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-                    '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
-                  '</svg>' +
-                '</button>' +
               '</div>' +
             '</div>';
           }
